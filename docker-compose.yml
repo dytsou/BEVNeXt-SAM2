@@ -1,0 +1,125 @@
+version: '3.8'
+
+services:
+  # Main BEVNeXt-SAM2 application
+  bevnext-sam2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bevnext-sam2:latest
+    container_name: bevnext-sam2-app
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+      - DISPLAY=$DISPLAY
+    volumes:
+      - ./data:/workspace/data
+      - ./checkpoints:/workspace/checkpoints
+      - ./outputs:/workspace/outputs
+      - ./logs:/workspace/logs
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    ports:
+      - "8888:8888"  # Jupyter
+      - "6006:6006"  # TensorBoard
+    stdin_open: true
+    tty: true
+    command: python examples/demo_fusion.py
+    
+  # Development environment with Jupyter
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bevnext-sam2:latest
+    container_name: bevnext-sam2-dev
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+    volumes:
+      - .:/workspace/bevnext-sam2
+      - ./data:/workspace/data
+      - ./checkpoints:/workspace/checkpoints
+      - ./outputs:/workspace/outputs
+      - ./logs:/workspace/logs
+    ports:
+      - "8888:8888"
+      - "6006:6006"
+    working_dir: /workspace/bevnext-sam2
+    stdin_open: true
+    tty: true
+    command: |
+      bash -c "
+        jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token='' --NotebookApp.password=''
+      "
+    
+  # Training service
+  train:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bevnext-sam2:latest
+    container_name: bevnext-sam2-train
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ./data:/workspace/data
+      - ./checkpoints:/workspace/checkpoints
+      - ./outputs:/workspace/outputs
+      - ./logs:/workspace/logs
+      - ./configs:/workspace/bevnext-sam2/configs
+    working_dir: /workspace/bevnext-sam2
+    stdin_open: true
+    tty: true
+    command: echo "Ready for training. Use docker-compose exec train bash to start training."
+    
+  # Inference service
+  inference:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bevnext-sam2:latest
+    container_name: bevnext-sam2-inference
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ./data:/workspace/data
+      - ./checkpoints:/workspace/checkpoints
+      - ./outputs:/workspace/outputs
+      - ./configs:/workspace/bevnext-sam2/configs
+    working_dir: /workspace/bevnext-sam2
+    stdin_open: true
+    tty: true
+    command: echo "Ready for inference. Use docker-compose exec inference bash to start inference."
+
+  # TensorBoard service
+  tensorboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bevnext-sam2:latest
+    container_name: bevnext-sam2-tensorboard
+    volumes:
+      - ./logs:/workspace/logs
+    ports:
+      - "6006:6006"
+    command: tensorboard --logdir=/workspace/logs --host=0.0.0.0 --port=6006
+
+# Define volumes for persistent data
+volumes:
+  data:
+    driver: local
+  checkpoints:
+    driver: local
+  outputs:
+    driver: local
+  logs:
+    driver: local
+
+# Define networks
+networks:
+  default:
+    driver: bridge 
