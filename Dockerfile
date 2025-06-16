@@ -72,9 +72,9 @@ RUN pip install --no-cache-dir \
 COPY . .
 
 # Install the project in development mode
-# First, let's try installing the dependencies individually to debug
-RUN pip install --no-cache-dir numba>=0.55.0 networkx>=2.2,<2.3
-RUN pip install -e . --no-deps
+# Force install the correct numba version first
+RUN pip install --no-cache-dir --force-reinstall numba>=0.55.0
+RUN pip install -e .
 
 # Create directories for data and checkpoints
 RUN mkdir -p /workspace/data /workspace/checkpoints /workspace/outputs
