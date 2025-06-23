@@ -56,6 +56,9 @@ def get_sam2_extensions():
     try:
         from torch.utils.cpp_extension import CUDAExtension
         
+        # Ensure sam2 directory exists
+        os.makedirs('sam2', exist_ok=True)
+        
         srcs = ["sam2_module/csrc/connected_components.cu"]
         compile_args = {
             "cxx": [],
@@ -75,8 +78,8 @@ def get_sam2_extensions():
 # Merged requirements
 REQUIRED_PACKAGES = [
     # Core dependencies
-    "torch>=2.5.1",
-    "torchvision>=0.20.1",
+    "torch>=2.0.0",
+    "torchvision>=0.15.1",
     "numpy>=1.24.4",
     
     # SAM2 dependencies
@@ -143,17 +146,15 @@ if __name__ == '__main__':
         author='BEVNeXt-SAM2 Contributors',
         keywords='computer vision, 3D object detection, segmentation, BEV, SAM',
         url='https://github.com/your-repo/bevnext-sam2',
-        packages=find_packages(),
+        packages=find_packages() + ['sam2'],
         include_package_data=True,
         classifiers=[
             'Development Status :: 4 - Beta',
-            'License :: OSI Approved :: Apache Software License',
             'Operating System :: OS Independent',
             'Programming Language :: Python :: 3',
             'Programming Language :: Python :: 3.10',
             'Programming Language :: Python :: 3.11',
         ],
-        license='Apache License 2.0',
         python_requires='>=3.10.0',
         install_requires=REQUIRED_PACKAGES,
         extras_require=EXTRA_PACKAGES,

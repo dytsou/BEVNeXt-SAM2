@@ -1,0 +1,28 @@
+{
+  "d_model": 256,
+  "nhead": 8,
+  "num_transformer_layers": 6,
+  "num_classes": 10,
+  "num_queries": 600,
+  "bev_size": [
+    64,
+    64
+  ],
+  "image_size": [
+    224,
+    224
+  ],
+  "num_cameras": 6,
+  "batch_size": 4,
+  "learning_rate": 0.0001,
+  "weight_decay": 0.0001,
+  "num_epochs": 50,
+  "num_workers": 6,
+  "num_samples": {
+    "train": 2000,
+    "val": 400
+  },
+  "memory_fraction": 0.85,
+  "gradient_checkpointing": true,
+  "output_dir": "/workspace/outputs/training_gpu_mid"
+}

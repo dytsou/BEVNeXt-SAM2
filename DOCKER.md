@@ -7,7 +7,7 @@ This document provides comprehensive instructions for running BEVNeXt-SAM2 in Do
 ### System Requirements
 - Docker Engine 20.10+
 - NVIDIA Docker runtime (for GPU support)
-- NVIDIA GPU with CUDA 12.1+ support
+- NVIDIA GPU with CUDA 12.5.0+ support
 - At least 16GB RAM
 - 50GB+ free disk space
 
@@ -36,7 +36,7 @@ This document provides comprehensive instructions for running BEVNeXt-SAM2 in Do
 
 3. **Verify GPU access**:
    ```bash
-   docker run --rm --gpus all nvidia/cuda:12.1-base-ubuntu22.04 nvidia-smi
+   docker run --rm --gpus all nvidia/cuda:12.5.0-base-ubuntu22.04 nvidia-smi
    ```
 
 ## Quick Start
@@ -85,9 +85,9 @@ This document provides comprehensive instructions for running BEVNeXt-SAM2 in Do
 ## Docker Images
 
 ### Base Image
-The Dockerfile uses `nvidia/cuda:12.1-devel-ubuntu22.04` as the base image, which provides:
+The Dockerfile uses `nvidia/cuda:12.5.0-devel-ubuntu22.04` as the base image, which provides:
 - Ubuntu 22.04 LTS
-- CUDA 12.1 development environment
+- CUDA 12.5 development environment
 - cuDNN libraries
 - Build tools and compilers
 
@@ -233,7 +233,7 @@ docker run --cpus="8.0" bevnext-sam2:latest
    docker info | grep nvidia
    
    # Test GPU access
-   docker run --rm --gpus all nvidia/cuda:12.1-base-ubuntu22.04 nvidia-smi
+   docker run --rm --gpus all nvidia/cuda:12.5.0-base-ubuntu22.04 nvidia-smi
    ```
 
 2. **Out of memory**:
