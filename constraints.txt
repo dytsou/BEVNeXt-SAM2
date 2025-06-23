@@ -8,5 +8,5 @@ mmsegmentation==0.30.0
 # NumPy version for compatibility
 numpy==1.19.5
 # PyTorch version constraints
-torch==1.13.1
+torch==2.7.1
 torchvision==0.14.1 
