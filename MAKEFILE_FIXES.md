@@ -1,8 +1,8 @@
-# Makefile Fixes and Improvements
+# Makefile Fixes and Improvements (Docker-Only)
 
 ## Overview
 
-This document summarizes the fixes and improvements made to ensure all Makefile functions run properly in the BEVNeXt-SAM2 project.
+This document summarizes the fixes and improvements made to ensure all Makefile functions run properly in the BEVNeXt-SAM2 project. **ALL OPERATIONS NOW RUN EXCLUSIVELY IN DOCKER CONTAINERS** - no native Python execution is supported.
 
 ## What Was Fixed
 
@@ -59,6 +59,16 @@ This document summarizes the fixes and improvements made to ensure all Makefile 
 - Debug information for troubleshooting
 - Graceful handling of missing dependencies
 
+### 6. Docker-Only Architecture
+
+**Major Change**: All operations now run exclusively in Docker containers with:
+- **No native Python execution** - everything runs in containers
+- **Automatic Docker availability checking** during setup
+- **GPU runtime detection** for CUDA operations
+- **Simplified Docker commands** using common variables
+- **Consistent environment** across all operations
+- **Volume mounting** for data persistence
+
 ## Key Makefile Features
 
 ### 1. Intelligent Help System
@@ -85,12 +95,14 @@ make dev JUPYTER_PORT=8889            # Use different port
 make advanced-inference ADVANCED_CONFIG=custom_config.py
 ```
 
-### 4. Both Native and Docker Support
+### 4. Docker-Only Execution
 
-Every major operation has both native and Docker variants:
-- `make train-bevnext` vs `make train-docker`
-- `make test` vs `make test-docker`
-- `make inference` vs `make inference-docker`
+All operations run exclusively in Docker containers:
+- `make train-bevnext` - Training in Docker with GPU support
+- `make test` - Testing in Docker with proper volume mounting
+- `make inference` - Inference in Docker with result persistence
+- `make lint` - Code linting in containerized environment
+- `make prepare-data` - Data preparation in isolated container
 
 ### 5. Quick Start Options
 
@@ -101,25 +113,25 @@ make quick-dev     # Build and start development environment
 
 ## Usage Examples
 
-### Initial Setup
+### Initial Setup (Docker Required)
 ```bash
-make setup          # Create directories and set permissions
-make install-all    # Install all dependencies
+make setup          # Check Docker availability and create directories
+make build          # Build Docker image with all dependencies
 ```
 
-### Docker Workflow
+### Docker-Only Workflow
 ```bash
-make build          # Build Docker image
-make demo           # Run demo
-make dev            # Start Jupyter development environment
-make shell          # Interactive shell for debugging
+make build          # Build Docker image (required first step)
+make demo           # Run demo in container
+make dev            # Start Jupyter development environment in container
+make shell          # Interactive container shell for debugging
 ```
 
-### Training and Testing
+### Training and Testing (All in Docker)
 ```bash
-make train-bevnext  # Train BEVNeXt model
-make test           # Run evaluation
-make inference      # Run inference on test data
+make train-bevnext  # Train BEVNeXt model in Docker with GPU support
+make test           # Run evaluation in Docker container
+make inference      # Run inference in Docker with result persistence
 ```
 
 ### Development Tools
