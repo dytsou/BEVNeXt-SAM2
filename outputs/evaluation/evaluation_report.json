@@ -1,37 +1,37 @@
 {
   "evaluation_summary": {
-    "timestamp": "2025-07-14 05:57:29",
+    "timestamp": "2025-07-14 07:13:07",
     "total_samples": 100,
     "evaluation_mode": "Comprehensive Model Assessment"
   },
   "detection_performance": {
-    "precision": 0.571917808219178,
-    "recall": 0.021358229952679372,
-    "f1_score": 0.0411786462828258,
-    "mAP@0.5": 0.6435687290837847,
-    "mAP@0.75": 0.41032901834431534,
-    "mAP@0.5:0.95": 0.5769553734040936,
-    "total_detections": 292,
+    "precision": 0.594059405940594,
+    "recall": 0.023020846655582555,
+    "f1_score": 0.04432405811376508,
+    "mAP@0.5": 0.5352861654906672,
+    "mAP@0.75": 0.3324580471402745,
+    "mAP@0.5:0.95": 0.3770233872831105,
+    "total_detections": 303,
     "total_ground_truths": 7819,
-    "true_positives": 167,
-    "false_positives": 125,
-    "false_negatives": 7652
+    "true_positives": 180,
+    "false_positives": 123,
+    "false_negatives": 7639
   },
   "segmentation_performance": {
-    "iou": 0.5673763681845451,
-    "dice_coefficient": 0.7935849534544994,
-    "pixel_accuracy": 0.9094904534788162,
-    "mean_iou": 0.7235779006129879,
-    "total_intersection": 100252,
-    "total_union": 176694
+    "iou": 0.5604373148053541,
+    "dice_coefficient": 0.7853759232522343,
+    "pixel_accuracy": 0.8767212151429622,
+    "mean_iou": 0.719749837424218,
+    "total_intersection": 98730,
+    "total_union": 176166
   },
   "inference_performance": {
-    "avg_inference_time": 0.1451622223854065,
-    "fps": 6.888844656462992,
+    "avg_inference_time": 0.14616857290267946,
+    "fps": 6.841415908642758,
     "total_samples": 100
   },
   "overall_assessment": {
-    "detection_grade": "A",
+    "detection_grade": "B",
     "segmentation_grade": "B",
     "speed_grade": "C"
   }

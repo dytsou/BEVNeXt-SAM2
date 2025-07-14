@@ -1,27 +1,27 @@
 BEVNeXt-SAM2 Model Evaluation Report
 ==================================================
 
-Evaluation Date: 2025-07-14 05:57:29
+Evaluation Date: 2025-07-14 07:13:07
 Test Samples: 100
 
 Detection Performance:
-  • mAP@0.5: 0.644
-  • mAP@0.75: 0.410
-  • mAP@0.5:0.95: 0.577
-  • Precision: 0.572
-  • Recall: 0.021
-  • F1 Score: 0.041
+  • mAP@0.5: 0.535
+  • mAP@0.75: 0.332
+  • mAP@0.5:0.95: 0.377
+  • Precision: 0.594
+  • Recall: 0.023
+  • F1 Score: 0.044
 
 Segmentation Performance:
-  • Mean IoU: 0.724
-  • Dice Coefficient: 0.794
-  • Pixel Accuracy: 0.909
+  • Mean IoU: 0.720
+  • Dice Coefficient: 0.785
+  • Pixel Accuracy: 0.877
 
 Inference Performance:
-  • Average Time: 0.145s
-  • FPS: 6.9
+  • Average Time: 0.146s
+  • FPS: 6.8
 
 Overall Grades:
-  • Detection: A
+  • Detection: B
   • Segmentation: B
   • Speed: C
