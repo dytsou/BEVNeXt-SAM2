@@ -27,7 +27,12 @@ def make_cuda_ext(name,
     define_macros = []
     extra_compile_args = {'cxx': [] + extra_args}
 
-    if torch.cuda.is_available() or os.getenv('FORCE_CUDA', '0') == '1':
+    force_cuda = os.getenv('FORCE_CUDA', '0')
+    if force_cuda == '0':
+        # Explicitly disable CUDA compilation
+        print('Compiling {} without CUDA (FORCE_CUDA=0)'.format(name))
+        extension = CppExtension
+    elif torch.cuda.is_available() or force_cuda == '1':
         define_macros += [('WITH_CUDA', None)]
         extension = CUDAExtension
         extra_compile_args['nvcc'] = extra_args + [
@@ -50,7 +55,9 @@ def make_cuda_ext(name,
 
 def get_sam2_extensions():
     """Get SAM2 CUDA extensions"""
-    if not torch.cuda.is_available() and os.getenv('FORCE_CUDA', '0') != '1':
+    force_cuda = os.getenv('FORCE_CUDA', '0')
+    if force_cuda == '0' or (not torch.cuda.is_available() and force_cuda != '1'):
+        print("Skipping SAM2 CUDA extensions (FORCE_CUDA=0 or CUDA not available)")
         return []
     
     try:
