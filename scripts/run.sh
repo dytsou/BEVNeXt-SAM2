@@ -26,10 +26,13 @@ show_usage() {
     echo "Usage: $0 [MODE] [OPTIONS]"
     echo ""
     echo "Modes:"
-    echo "  demo                 Run the demo script"
+    echo "  demo                 Run automatic BEVNeXt-SAM2 demo (no prompts)"
+    echo "  test-model           Run comprehensive testing suite (validates setup)"
+    echo "  eval                 Evaluate trained model performance on test dataset"
+    echo "  viz, visualize       Generate comprehensive evaluation visualizations"
     echo "  dev                  Start development environment with Jupyter"
     echo "  shell                Start interactive shell in container"
-    echo "  train                Start training environment"
+    echo "  train                Start automatic BEVNeXt-SAM2 training (no prompts)"
     echo "  inference            Start inference environment"
     echo "  tensorboard          Start TensorBoard server"
     echo ""
@@ -41,10 +44,13 @@ show_usage() {
     echo "  --help, -h           Show this help message"
     echo ""
     echo "Examples:"
-    echo "  $0 demo                    # Run demo"
+    echo "  $0 demo                    # Run automatic demo (no prompts)"
+    echo "  $0 test-model              # Run comprehensive test suite"
+    echo "  $0 eval                    # Evaluate trained model performance"
+    echo "  $0 viz                     # Generate evaluation visualizations"
     echo "  $0 dev --port 8889         # Start Jupyter on port 8889"
     echo "  $0 shell                   # Interactive shell"
-    echo "  $0 train --gpu 1           # Training on GPU 1"
+    echo "  $0 train --gpu 1           # Automatic training on GPU 1"
 }
 
 # Function to check if container exists
@@ -167,13 +173,166 @@ DOCKER_OPTS="$DOCKER_OPTS -v $ABS_LOGS_PATH:/workspace/logs"
 # Run based on mode
 case $MODE in
     demo)
-        echo -e "${GREEN}Running BEVNeXt-SAM2 demo...${NC}"
+        echo -e "${GREEN}Running automatic BEVNeXt-SAM2 demo...${NC}"
+        echo -e "${BLUE}Demo will showcase 3D detection + 2D segmentation fusion${NC}"
+        echo -e "${YELLOW}Demo features:${NC}"
+        echo -e "  • BEV-SAM fusion demonstration"
+        echo -e "  • SAM-enhanced 3D detection"
+        echo -e "  • Synthetic data generation"
+        echo -e "  • Real-time inference simulation"
+        echo -e "  • Visual output examples"
+        echo ""
         CONTAINER_FULL_NAME="${CONTAINER_NAME}-demo"
         remove_container "$CONTAINER_FULL_NAME"
+        
+        echo -e "${GREEN}🎬 Launching BEVNeXt-SAM2 demo...${NC}"
         docker run $DOCKER_OPTS \
             --name "$CONTAINER_FULL_NAME" \
+            -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2 \
+            -v $ABS_OUTPUTS_PATH:/workspace/outputs \
+            -w /workspace/bevnext-sam2 \
             $IMAGE_NAME \
-            python examples/demo_fusion.py
+            bash -c "
+                echo '🎯 Starting BEVNeXt-SAM2 Integration Demo...' && \
+                echo 'System Status:' && \
+                python -c 'import torch; print(f\"  • CUDA available: {torch.cuda.is_available()}\"); print(f\"  • GPU count: {torch.cuda.device_count() if torch.cuda.is_available() else 0}\")' && \
+                echo '  • Demo mode: Automatic execution' && \
+                echo '  • Data: Synthetic generation' && \
+                echo '  • Outputs: Saved to /workspace/outputs/' && \
+                echo '' && \
+                echo '🚀 Running fusion demonstrations...' && \
+                echo '' && \
+                python examples/demo_fusion.py && \
+                echo '' && \
+                echo '✅ Demo completed successfully!' && \
+                echo '' && \
+                echo '📁 Check outputs/ directory for generated results' && \
+                echo '🎯 Ready for training with: ./scripts/run.sh train'
+            "
+        ;;
+        
+    test-model)
+        echo -e "${GREEN}Running comprehensive BEVNeXt-SAM2 test suite...${NC}"
+        echo -e "${BLUE}Testing will validate setup, dependencies, and functionality${NC}"
+        echo -e "${YELLOW}Test categories:${NC}"
+        echo -e "  • Basic imports and dependencies"
+        echo -e "  • Project structure validation"
+        echo -e "  • Docker setup verification"
+        echo -e "  • Training configuration tests"
+        echo -e "  • Synthetic data generation"
+        echo -e "  • Model creation and integration"
+        echo -e "  • Mini training simulation"
+        echo ""
+        CONTAINER_FULL_NAME="${CONTAINER_NAME}-test"
+        remove_container "$CONTAINER_FULL_NAME"
+        
+        echo -e "${GREEN}🧪 Launching comprehensive test suite...${NC}"
+        docker run $DOCKER_OPTS \
+            --name "$CONTAINER_FULL_NAME" \
+            -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2 \
+            -v $ABS_OUTPUTS_PATH:/workspace/outputs \
+            -w /workspace/bevnext-sam2 \
+            $IMAGE_NAME \
+            bash -c "
+                echo '🧪 Starting BEVNeXt-SAM2 Comprehensive Test Suite...' && \
+                echo 'System Status:' && \
+                python -c 'import torch; print(f\"  • CUDA available: {torch.cuda.is_available()}\"); print(f\"  • GPU count: {torch.cuda.device_count() if torch.cuda.is_available() else 0}\")' && \
+                echo '  • Test mode: Comprehensive validation' && \
+                echo '  • Outputs: Saved to /workspace/outputs/' && \
+                echo '' && \
+                echo '🔍 Running all test categories...' && \
+                echo '' && \
+                python test_training_setup.py && \
+                echo '' && \
+                echo '✅ Test suite completed!' && \
+                echo '' && \
+                echo '📊 All tests validate setup readiness for training' && \
+                echo '🎯 Ready for training with: ./scripts/run.sh train'
+            "
+        ;;
+        
+    eval)
+        echo -e "${GREEN}Running BEVNeXt-SAM2 model evaluation...${NC}"
+        echo -e "${BLUE}Evaluation will assess trained model performance on test dataset${NC}"
+        echo -e "${YELLOW}Evaluation metrics:${NC}"
+        echo -e "  • Detection performance (mAP, Precision, Recall)"
+        echo -e "  • Segmentation quality (IoU, Dice coefficient)"
+        echo -e "  • Inference speed (FPS, latency)"
+        echo -e "  • Overall model assessment"
+        echo ""
+        CONTAINER_FULL_NAME="${CONTAINER_NAME}-eval"
+        remove_container "$CONTAINER_FULL_NAME"
+        
+        echo -e "${GREEN}📊 Launching model evaluation...${NC}"
+        docker run $DOCKER_OPTS \
+            --name "$CONTAINER_FULL_NAME" \
+            -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2 \
+            -v $ABS_OUTPUTS_PATH:/workspace/outputs \
+            -v $ABS_CHECKPOINTS_PATH:/workspace/checkpoints \
+            -w /workspace/bevnext-sam2 \
+            $IMAGE_NAME \
+            bash -c "
+                echo '📊 Starting BEVNeXt-SAM2 Model Evaluation...' && \
+                echo 'Installing visualization dependencies...' && \
+                pip install opencv-python matplotlib --quiet && \
+                echo 'System Status:' && \
+                python -c 'import torch; print(f\"  • CUDA available: {torch.cuda.is_available()}\"); print(f\"  • GPU count: {torch.cuda.device_count() if torch.cuda.is_available() else 0}\")' && \
+                echo '  • Evaluation mode: Model performance assessment' && \
+                echo '  • Test dataset: Real nuScenes v1.0-mini dataset' && \
+                echo '  • Results: Saved to /workspace/outputs/evaluation/' && \
+                echo '  • Visualizations: 3D bounding boxes on camera images' && \
+                echo '' && \
+                echo '🔍 Running comprehensive model evaluation...' && \
+                echo '' && \
+                python evaluate_model.py --test-samples 100 --output-dir /workspace/outputs/evaluation && \
+                echo '' && \
+                echo '✅ Model evaluation completed!' && \
+                echo '' && \
+                echo '📊 Check outputs/evaluation/ for detailed results' && \
+                echo '🎯 Performance metrics and grades available in report' && \
+                echo '🎨 3D bounding box visualizations available in sample_visualizations/'
+            "
+        ;;
+        
+    viz|visualize)
+        echo -e "${GREEN}Creating comprehensive evaluation visualizations...${NC}"
+        echo -e "${BLUE}Generating performance charts, sample predictions, and interactive reports${NC}"
+        echo -e "${YELLOW}Visualization outputs:${NC}"
+        echo -e "  • Performance dashboard with comprehensive metrics"
+        echo -e "  • Detailed charts and statistical analyses"
+        echo -e "  • Sample prediction visualizations"
+        echo -e "  • 3D point cloud and BEV visualizations"
+        echo -e "  • Interactive HTML report"
+        echo ""
+        CONTAINER_FULL_NAME="${CONTAINER_NAME}-viz"
+        remove_container "$CONTAINER_FULL_NAME"
+        
+        echo -e "${GREEN}🎨 Launching visualization generator...${NC}"
+        docker run $DOCKER_OPTS \
+            --name "$CONTAINER_FULL_NAME" \
+            -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2 \
+            -v $ABS_OUTPUTS_PATH:/workspace/outputs \
+            -v $ABS_CHECKPOINTS_PATH:/workspace/checkpoints \
+            -w /workspace/bevnext-sam2 \
+            $IMAGE_NAME \
+            bash -c "
+                echo '🎨 Starting BEVNeXt-SAM2 Evaluation Visualization...' && \
+                echo 'Installing visualization dependencies...' && \
+                pip install seaborn --quiet && \
+                echo 'System Status:' && \
+                python -c 'import matplotlib; print(f\"  • Matplotlib: {matplotlib.__version__}\"); import numpy; print(f\"  • NumPy: {numpy.__version__}\"); import torch; print(f\"  • PyTorch: {torch.__version__}\")' && \
+                echo '  • Output directory: /workspace/outputs/evaluation/visualizations/' && \
+                echo '' && \
+                echo '📊 Creating comprehensive visualizations...' && \
+                echo '' && \
+                python create_evaluation_visualizations.py && \
+                echo '' && \
+                echo '✅ Visualization generation completed!' && \
+                echo '' && \
+                echo '📁 Visualizations saved to outputs/evaluation/visualizations/' && \
+                echo '🌐 Open evaluation_report.html in your browser for interactive view!' && \
+                echo '📊 Performance dashboard and detailed charts available as PNG files'
+            "
         ;;
         
     dev)
@@ -205,16 +364,44 @@ case $MODE in
         ;;
         
     train)
-        echo -e "${GREEN}Starting training environment...${NC}"
-        echo -e "${BLUE}Use this environment for training models${NC}"
+        echo -e "${GREEN}Starting automatic BEVNeXt-SAM2 training...${NC}"
+        echo -e "${BLUE}Training will start automatically with optimal configuration${NC}"
+        echo -e "${YELLOW}Training features:${NC}"
+        echo -e "  • Synthetic data generation (no external datasets needed)"
+        echo -e "  • Mixed precision training for memory optimization"
+        echo -e "  • Automatic checkpointing and logging"
+        echo -e "  • TensorBoard monitoring"
+        echo ""
         CONTAINER_FULL_NAME="${CONTAINER_NAME}-train"
         remove_container "$CONTAINER_FULL_NAME"
+        
+        # Output directories will be auto-created by training script based on GPU memory
+        
+        # Run training with automatic configuration
+        echo -e "${GREEN}🚀 Launching BEVNeXt-SAM2 training...${NC}"
         docker run $DOCKER_OPTS \
             --name "$CONTAINER_FULL_NAME" \
+            --shm-size=8g \
             -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2 \
+            -v $ABS_OUTPUTS_PATH:/workspace/outputs \
+            -v $ABS_LOGS_PATH:/workspace/logs \
             -w /workspace/bevnext-sam2 \
             $IMAGE_NAME \
-            bash
+            bash -c "
+                echo 'Starting BEVNeXt-SAM2 training...' && \
+                echo 'GPU Status:' && \
+                python -c 'import torch; print(\"CUDA available:\", torch.cuda.is_available()); print(\"GPU count:\", torch.cuda.device_count())' && \
+                echo '' && \
+                echo 'Training Configuration (Auto-detected):' && \
+                echo '  • Model: BEVNeXt + SAM2 Fusion' && \
+                echo '  • Data: Synthetic generation (no external datasets)' && \
+                echo '  • Mixed precision: Enabled' && \
+                echo '  • GPU memory: Auto-optimized configuration' && \
+                echo '  • Outputs: Auto-saved to /workspace/outputs/' && \
+                echo '  • Logs: TensorBoard + file logging' && \
+                echo '' && \
+                python training/train_bevnext_sam2.py --mixed-precision
+            "
         ;;
         
     inference)
