@@ -208,7 +208,6 @@ case $MODE in
         echo -e "${GREEN}🎬 Launching BEVNeXt-SAM2 demo...${NC}"
         docker run $DOCKER_OPTS \
             --name "$CONTAINER_FULL_NAME" \
-            --user $USER_UID:$USER_GID \
             -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2 \
             -v $ABS_OUTPUTS_PATH:/workspace/outputs \
             -w /workspace/bevnext-sam2 \
@@ -223,7 +222,8 @@ case $MODE in
                 echo '' && \
                 echo '🚀 Running fusion demonstrations...' && \
                 echo '' && \
-                python examples/demo_fusion.py && \
+                chown -R $USER_UID:$USER_GID /workspace/outputs && \
+                su -s /bin/bash $USER_UID -c 'cd /workspace/bevnext-sam2 && python examples/demo_fusion.py' && \
                 echo '' && \
                 echo '✅ Demo completed successfully!' && \
                 echo '' && \
@@ -287,7 +287,6 @@ case $MODE in
         echo -e "${GREEN}📊 Launching model evaluation...${NC}"
         docker run $DOCKER_OPTS \
             --name "$CONTAINER_FULL_NAME" \
-            --user $USER_UID:$USER_GID \
             -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2 \
             -v $ABS_OUTPUTS_PATH:/workspace/outputs \
             -v $ABS_CHECKPOINTS_PATH:/workspace/checkpoints \
@@ -306,7 +305,8 @@ case $MODE in
                 echo '' && \
                 echo '🔍 Running comprehensive model evaluation...' && \
                 echo '' && \
-                python evaluate_model.py --test-samples 100 --output-dir /workspace/outputs/evaluation && \
+                chown -R $USER_UID:$USER_GID /workspace/outputs && \
+                su -s /bin/bash $USER_UID -c 'cd /workspace/bevnext-sam2 && python evaluate_model.py --test-samples 100 --output-dir /workspace/outputs/evaluation' && \
                 echo '' && \
                 echo '✅ Model evaluation completed!' && \
                 echo '' && \
@@ -332,7 +332,6 @@ case $MODE in
         echo -e "${GREEN}🎨 Launching visualization generator...${NC}"
         docker run $DOCKER_OPTS \
             --name "$CONTAINER_FULL_NAME" \
-            --user $USER_UID:$USER_GID \
             -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2 \
             -v $ABS_OUTPUTS_PATH:/workspace/outputs \
             -v $ABS_CHECKPOINTS_PATH:/workspace/checkpoints \
@@ -348,7 +347,8 @@ case $MODE in
                 echo '' && \
                 echo '📊 Creating comprehensive visualizations...' && \
                 echo '' && \
-                python create_evaluation_visualizations.py && \
+                chown -R $USER_UID:$USER_GID /workspace/outputs && \
+                su -s /bin/bash $USER_UID -c 'cd /workspace/bevnext-sam2 && python create_evaluation_visualizations.py' && \
                 echo '' && \
                 echo '✅ Visualization generation completed!' && \
                 echo '' && \
@@ -405,7 +405,6 @@ case $MODE in
         docker run $DOCKER_OPTS \
             --name "$CONTAINER_FULL_NAME" \
             --shm-size=8g \
-            --user $USER_UID:$USER_GID \
             -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2 \
             -v $ABS_OUTPUTS_PATH:/workspace/outputs \
             -v $ABS_LOGS_PATH:/workspace/logs \
@@ -424,7 +423,8 @@ case $MODE in
                 echo '  • Outputs: Auto-saved to /workspace/outputs/' && \
                 echo '  • Logs: TensorBoard + file logging' && \
                 echo '' && \
-                python training/train_bevnext_sam2.py --mixed-precision
+                chown -R $USER_UID:$USER_GID /workspace/outputs /workspace/logs && \
+                su -s /bin/bash $USER_UID -c 'cd /workspace/bevnext-sam2 && python training/train_bevnext_sam2.py --mixed-precision'
             "
         ;;
         
