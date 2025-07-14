@@ -222,7 +222,9 @@ case $MODE in
                 echo '' && \
                 echo '🚀 Running fusion demonstrations...' && \
                 echo '' && \
-                chown -R $USER_UID:$USER_GID /workspace/outputs && \
+                chown -R $USER_UID:$USER_GID /workspace/outputs 2>/dev/null || true && \
+                mkdir -p /workspace/outputs && \
+                chmod -R 755 /workspace/outputs 2>/dev/null || true && \
                 su -s /bin/bash $USER_UID -c 'cd /workspace/bevnext-sam2 && python examples/demo_fusion.py' && \
                 echo '' && \
                 echo '✅ Demo completed successfully!' && \
@@ -305,7 +307,9 @@ case $MODE in
                 echo '' && \
                 echo '🔍 Running comprehensive model evaluation...' && \
                 echo '' && \
-                chown -R $USER_UID:$USER_GID /workspace/outputs && \
+                chown -R $USER_UID:$USER_GID /workspace/outputs 2>/dev/null || true && \
+                mkdir -p /workspace/outputs/evaluation && \
+                chmod -R 755 /workspace/outputs/evaluation 2>/dev/null || true && \
                 su -s /bin/bash $USER_UID -c 'cd /workspace/bevnext-sam2 && python evaluate_model.py --test-samples 100 --output-dir /workspace/outputs/evaluation' && \
                 echo '' && \
                 echo '✅ Model evaluation completed!' && \
@@ -347,7 +351,9 @@ case $MODE in
                 echo '' && \
                 echo '📊 Creating comprehensive visualizations...' && \
                 echo '' && \
-                chown -R $USER_UID:$USER_GID /workspace/outputs && \
+                chown -R $USER_UID:$USER_GID /workspace/outputs 2>/dev/null || true && \
+                mkdir -p /workspace/outputs/evaluation/visualizations && \
+                chmod -R 755 /workspace/outputs/evaluation 2>/dev/null || true && \
                 su -s /bin/bash $USER_UID -c 'cd /workspace/bevnext-sam2 && python create_evaluation_visualizations.py' && \
                 echo '' && \
                 echo '✅ Visualization generation completed!' && \
@@ -423,7 +429,9 @@ case $MODE in
                 echo '  • Outputs: Auto-saved to /workspace/outputs/' && \
                 echo '  • Logs: TensorBoard + file logging' && \
                 echo '' && \
-                chown -R $USER_UID:$USER_GID /workspace/outputs /workspace/logs && \
+                chown -R $USER_UID:$USER_GID /workspace/outputs /workspace/logs 2>/dev/null || true && \
+                mkdir -p /workspace/outputs /workspace/logs && \
+                chmod -R 755 /workspace/outputs /workspace/logs 2>/dev/null || true && \
                 su -s /bin/bash $USER_UID -c 'cd /workspace/bevnext-sam2 && python training/train_bevnext_sam2.py --mixed-precision'
             "
         ;;
