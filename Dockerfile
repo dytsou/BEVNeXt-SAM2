@@ -145,12 +145,9 @@ ENV LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 # First, let's check if CUDA is properly detected
 RUN python -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda}')"
 
-# Install the project using minimal setup (without CUDA extensions)
+# Install the project using regular setup (without CUDA extensions)
 # This avoids compilation issues during Docker build
-RUN mv setup.py setup_original.py && \
-    cp setup_minimal.py setup.py && \
-    pip install --no-deps -e . && \
-    mv setup_original.py setup.py
+RUN FORCE_CUDA=0 pip install --no-deps -e .
 
 # Create directories for data and checkpoints
 RUN mkdir -p /workspace/data /workspace/checkpoints /workspace/outputs
