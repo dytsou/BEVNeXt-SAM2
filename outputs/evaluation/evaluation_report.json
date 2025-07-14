@@ -1,0 +1,38 @@
+{
+  "evaluation_summary": {
+    "timestamp": "2025-07-14 05:57:29",
+    "total_samples": 100,
+    "evaluation_mode": "Comprehensive Model Assessment"
+  },
+  "detection_performance": {
+    "precision": 0.571917808219178,
+    "recall": 0.021358229952679372,
+    "f1_score": 0.0411786462828258,
+    "mAP@0.5": 0.6435687290837847,
+    "mAP@0.75": 0.41032901834431534,
+    "mAP@0.5:0.95": 0.5769553734040936,
+    "total_detections": 292,
+    "total_ground_truths": 7819,
+    "true_positives": 167,
+    "false_positives": 125,
+    "false_negatives": 7652
+  },
+  "segmentation_performance": {
+    "iou": 0.5673763681845451,
+    "dice_coefficient": 0.7935849534544994,
+    "pixel_accuracy": 0.9094904534788162,
+    "mean_iou": 0.7235779006129879,
+    "total_intersection": 100252,
+    "total_union": 176694
+  },
+  "inference_performance": {
+    "avg_inference_time": 0.1451622223854065,
+    "fps": 6.888844656462992,
+    "total_samples": 100
+  },
+  "overall_assessment": {
+    "detection_grade": "A",
+    "segmentation_grade": "B",
+    "speed_grade": "C"
+  }
+}
