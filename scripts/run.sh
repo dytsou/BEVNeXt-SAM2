@@ -5,6 +5,11 @@
 
 set -e  # Exit on any error
 
+USER=$(whoami)
+GROUP=$(id -gn)
+USER_UID=$(id -u)
+USER_GID=$(id -g)
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -144,6 +149,21 @@ fi
 echo -e "${BLUE}Creating necessary directories...${NC}"
 mkdir -p "$DATA_PATH" "$CHECKPOINTS_PATH" "./outputs" "./logs"
 
+# Ensure proper permissions for Docker user (UID $USER_UID)
+echo -e "${BLUE}Setting directory permissions...${NC}"
+if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    # Sudo is available and can run without password
+    echo -e "${GREEN}Setting ownership to $USER:$GROUP (UID:GID $USER_UID:$USER_GID)...${NC}"
+    sudo chown -R $USER:$GROUP "./outputs" "./logs" 2>/dev/null || {
+        echo -e "${YELLOW}Warning: Could not change ownership. Setting open permissions...${NC}"
+        chmod -R 755 "./outputs" "./logs" 2>/dev/null || true
+    }
+else
+    # No sudo or sudo requires password, use permissive permissions
+    echo -e "${YELLOW}Setting open permissions (no sudo access)...${NC}"
+    chmod -R 755 "./outputs" "./logs" 2>/dev/null || true
+fi
+
 # Get absolute paths after creating directories
 ABS_DATA_PATH=$(cd "$DATA_PATH" && pwd)
 ABS_CHECKPOINTS_PATH=$(cd "$CHECKPOINTS_PATH" && pwd)
@@ -188,6 +208,7 @@ case $MODE in
         echo -e "${GREEN}🎬 Launching BEVNeXt-SAM2 demo...${NC}"
         docker run $DOCKER_OPTS \
             --name "$CONTAINER_FULL_NAME" \
+            --user $USER_UID:$USER_GID \
             -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2 \
             -v $ABS_OUTPUTS_PATH:/workspace/outputs \
             -w /workspace/bevnext-sam2 \
@@ -266,6 +287,7 @@ case $MODE in
         echo -e "${GREEN}📊 Launching model evaluation...${NC}"
         docker run $DOCKER_OPTS \
             --name "$CONTAINER_FULL_NAME" \
+            --user $USER_UID:$USER_GID \
             -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2 \
             -v $ABS_OUTPUTS_PATH:/workspace/outputs \
             -v $ABS_CHECKPOINTS_PATH:/workspace/checkpoints \
@@ -310,6 +332,7 @@ case $MODE in
         echo -e "${GREEN}🎨 Launching visualization generator...${NC}"
         docker run $DOCKER_OPTS \
             --name "$CONTAINER_FULL_NAME" \
+            --user $USER_UID:$USER_GID \
             -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2 \
             -v $ABS_OUTPUTS_PATH:/workspace/outputs \
             -v $ABS_CHECKPOINTS_PATH:/workspace/checkpoints \
@@ -382,6 +405,7 @@ case $MODE in
         docker run $DOCKER_OPTS \
             --name "$CONTAINER_FULL_NAME" \
             --shm-size=8g \
+            --user $USER_UID:$USER_GID \
             -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2 \
             -v $ABS_OUTPUTS_PATH:/workspace/outputs \
             -v $ABS_LOGS_PATH:/workspace/logs \
