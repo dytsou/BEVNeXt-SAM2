@@ -147,8 +147,11 @@ def test_synthetic_data():
     print("\n🔍 Testing synthetic data generation...")
     
     try:
-        # Add the current directory to Python path
-        sys.path.insert(0, '/workspace')
+        # Add the current directory to Python path (portable way)
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = current_dir  # Assuming script is in project root
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
         
         # Import the training module
         from training.train_bevnext_sam2 import SyntheticDataset, get_default_config
