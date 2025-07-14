@@ -136,6 +136,8 @@ if __name__ == '__main__':
             module='bevnext.ops.bev_pool_v2',
             sources=[
                 'src/bev_pool.cpp',
+            ],
+            sources_cuda=[
                 'src/bev_pool_cuda.cu',
             ],
         )

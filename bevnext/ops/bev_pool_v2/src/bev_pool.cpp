@@ -1,6 +1,8 @@
 // Copyright (c) Phigent Robotics. All rights reserved.
 // Reference https://arxiv.org/abs/2211.17111
 #include <torch/torch.h>
+
+#ifdef WITH_CUDA
 #include <c10/cuda/CUDAGuard.h>
 
 // CUDA function declarations
@@ -12,6 +14,7 @@ void bev_pool_v2_grad(int c, int n_intervals, const float* out_grad,
   const float* depth, const float* feat, const int* ranks_depth, const int* ranks_feat,
   const int* ranks_bev, const int* interval_starts, const int* interval_lengths,
   float* depth_grad, float* feat_grad);
+#endif
 
 
 /*
@@ -37,6 +40,7 @@ void bev_pool_v2_forward(
   const at::Tensor _interval_lengths,
   const at::Tensor _interval_starts
 ) {
+#ifdef WITH_CUDA
   int c = _feat.size(4);
   int n_intervals = _interval_lengths.size(0);
   const at::cuda::OptionalCUDAGuard device_guard(device_of(_depth));
@@ -54,6 +58,9 @@ void bev_pool_v2_forward(
     c, n_intervals, depth, feat, ranks_depth, ranks_feat,
     ranks_bev, interval_starts, interval_lengths, out
   );
+#else
+  AT_ERROR("bev_pool_v2_forward: CUDA support not available. This operation requires CUDA.");
+#endif
 }
 
 
@@ -83,6 +90,7 @@ void bev_pool_v2_backward(
   const at::Tensor _interval_lengths,
   const at::Tensor _interval_starts
 ) {
+#ifdef WITH_CUDA
   int c = _out_grad.size(4);
   int n_intervals = _interval_lengths.size(0);
   const at::cuda::OptionalCUDAGuard device_guard(device_of(_out_grad));
@@ -101,6 +109,9 @@ void bev_pool_v2_backward(
     c, n_intervals, out_grad, depth, feat, ranks_depth, ranks_feat,
     ranks_bev, interval_starts, interval_lengths, depth_grad, feat_grad
   );
+#else
+  AT_ERROR("bev_pool_v2_backward: CUDA support not available. This operation requires CUDA.");
+#endif
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
