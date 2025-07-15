@@ -151,18 +151,9 @@ mkdir -p "$DATA_PATH" "$CHECKPOINTS_PATH" "./outputs" "./logs"
 
 # Ensure proper permissions for Docker user (UID $USER_UID)
 echo -e "${BLUE}Setting directory permissions...${NC}"
-if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-    # Sudo is available and can run without password
-    echo -e "${GREEN}Setting ownership to $USER:$GROUP (UID:GID $USER_UID:$USER_GID)...${NC}"
-    sudo chown -R $USER:$GROUP "./outputs" "./logs" 2>/dev/null || {
-        echo -e "${YELLOW}Warning: Could not change ownership. Setting open permissions...${NC}"
-        chmod -R 755 "./outputs" "./logs" 2>/dev/null || true
-    }
-else
-    # No sudo or sudo requires password, use permissive permissions
-    echo -e "${YELLOW}Setting open permissions (no sudo access)...${NC}"
-    chmod -R 755 "./outputs" "./logs" 2>/dev/null || true
-fi
+# Set permissive permissions without requiring sudo
+echo -e "${GREEN}Setting standard permissions for directories...${NC}"
+chmod -R 755 "./outputs" "./logs" 2>/dev/null || true
 
 # Get absolute paths after creating directories
 ABS_DATA_PATH=$(cd "$DATA_PATH" && pwd)
@@ -182,6 +173,7 @@ fi
 
 # Common Docker run options
 DOCKER_OPTS="--rm -it"
+DOCKER_OPTS="$DOCKER_OPTS --user $USER_UID:$USER_GID"
 DOCKER_OPTS="$DOCKER_OPTS $RUNTIME_OPTS"
 DOCKER_OPTS="$DOCKER_OPTS -e NVIDIA_VISIBLE_DEVICES=all"
 DOCKER_OPTS="$DOCKER_OPTS -e CUDA_VISIBLE_DEVICES=$GPU_ID"
@@ -222,22 +214,8 @@ case $MODE in
                 echo '' && \
                 echo '🚀 Running fusion demonstrations...' && \
                 echo '' && \
-                EXISTING_USER=\$(getent passwd $USER_UID | cut -d: -f1) && \
-                if [ -z \"\$EXISTING_USER\" ]; then \
-                    if ! getent group $USER_GID >/dev/null 2>&1; then groupadd -g $USER_GID hostgroup; fi && \
-                    useradd -u $USER_UID -g $USER_GID -M -s /bin/bash hostuser && \
-                    EXEC_USER=hostuser; \
-                else \
-                    EXEC_USER=\$EXISTING_USER; \
-                fi && \
-                chown -R $USER_UID:$USER_GID /workspace/outputs 2>/dev/null || true && \
                 mkdir -p /workspace/outputs && \
-                chmod -R 755 /workspace/outputs 2>/dev/null || true && \
-                if [ \"\$EXEC_USER\" = \"\$(whoami)\" ]; then \
-                    python examples/demo_fusion.py; \
-                else \
-                    su -s /bin/bash -c 'cd /workspace/bevnext-sam2 && python examples/demo_fusion.py' \$EXEC_USER; \
-                fi && \
+                python examples/demo_fusion.py && \
                 echo '' && \
                 echo '✅ Demo completed successfully!' && \
                 echo '' && \
@@ -319,22 +297,8 @@ case $MODE in
                 echo '' && \
                 echo '🔍 Running comprehensive model evaluation...' && \
                 echo '' && \
-                EXISTING_USER=\$(getent passwd $USER_UID | cut -d: -f1) && \
-                if [ -z \"\$EXISTING_USER\" ]; then \
-                    if ! getent group $USER_GID >/dev/null 2>&1; then groupadd -g $USER_GID hostgroup; fi && \
-                    useradd -u $USER_UID -g $USER_GID -M -s /bin/bash hostuser && \
-                    EXEC_USER=hostuser; \
-                else \
-                    EXEC_USER=\$EXISTING_USER; \
-                fi && \
-                chown -R $USER_UID:$USER_GID /workspace/outputs 2>/dev/null || true && \
                 mkdir -p /workspace/outputs/evaluation && \
-                chmod -R 755 /workspace/outputs/evaluation 2>/dev/null || true && \
-                if [ \"\$EXEC_USER\" = \"\$(whoami)\" ]; then \
-                    python evaluate_model.py --test-samples 100 --output-dir /workspace/outputs/evaluation; \
-                else \
-                    su -s /bin/bash -c 'cd /workspace/bevnext-sam2 && python evaluate_model.py --test-samples 100 --output-dir /workspace/outputs/evaluation' \$EXEC_USER; \
-                fi && \
+                python evaluate_model.py --test-samples 100 --output-dir /workspace/outputs/evaluation && \
                 echo '' && \
                 echo '✅ Model evaluation completed!' && \
                 echo '' && \
@@ -375,22 +339,8 @@ case $MODE in
                 echo '' && \
                 echo '📊 Creating comprehensive visualizations...' && \
                 echo '' && \
-                EXISTING_USER=\$(getent passwd $USER_UID | cut -d: -f1) && \
-                if [ -z \"\$EXISTING_USER\" ]; then \
-                    if ! getent group $USER_GID >/dev/null 2>&1; then groupadd -g $USER_GID hostgroup; fi && \
-                    useradd -u $USER_UID -g $USER_GID -M -s /bin/bash hostuser && \
-                    EXEC_USER=hostuser; \
-                else \
-                    EXEC_USER=\$EXISTING_USER; \
-                fi && \
-                chown -R $USER_UID:$USER_GID /workspace/outputs 2>/dev/null || true && \
                 mkdir -p /workspace/outputs/evaluation/visualizations && \
-                chmod -R 755 /workspace/outputs/evaluation 2>/dev/null || true && \
-                if [ \"\$EXEC_USER\" = \"\$(whoami)\" ]; then \
-                    python create_evaluation_visualizations.py; \
-                else \
-                    su -s /bin/bash -c 'cd /workspace/bevnext-sam2 && python create_evaluation_visualizations.py' \$EXEC_USER; \
-                fi && \
+                python create_evaluation_visualizations.py && \
                 echo '' && \
                 echo '✅ Visualization generation completed!' && \
                 echo '' && \
@@ -465,22 +415,8 @@ case $MODE in
                 echo '  • Outputs: Auto-saved to /workspace/outputs/' && \
                 echo '  • Logs: TensorBoard + file logging' && \
                 echo '' && \
-                EXISTING_USER=\$(getent passwd $USER_UID | cut -d: -f1) && \
-                if [ -z \"\$EXISTING_USER\" ]; then \
-                    if ! getent group $USER_GID >/dev/null 2>&1; then groupadd -g $USER_GID hostgroup; fi && \
-                    useradd -u $USER_UID -g $USER_GID -M -s /bin/bash hostuser && \
-                    EXEC_USER=hostuser; \
-                else \
-                    EXEC_USER=\$EXISTING_USER; \
-                fi && \
-                chown -R $USER_UID:$USER_GID /workspace/outputs /workspace/logs 2>/dev/null || true && \
                 mkdir -p /workspace/outputs /workspace/logs && \
-                chmod -R 755 /workspace/outputs /workspace/logs 2>/dev/null || true && \
-                if [ \"\$EXEC_USER\" = \"\$(whoami)\" ]; then \
-                    python training/train_bevnext_sam2.py --mixed-precision; \
-                else \
-                    su -s /bin/bash -c 'cd /workspace/bevnext-sam2 && python training/train_bevnext_sam2.py --mixed-precision' \$EXEC_USER; \
-                fi
+                python training/train_bevnext_sam2.py --mixed-precision
             "
         ;;
         
