@@ -174,6 +174,8 @@ fi
 # Common Docker run options
 DOCKER_OPTS="--rm -it"
 DOCKER_OPTS="$DOCKER_OPTS --user $USER_UID:$USER_GID"
+DOCKER_OPTS="$DOCKER_OPTS -e HOME=/workspace"
+DOCKER_OPTS="$DOCKER_OPTS -e PYTHONUSERBASE=/workspace/.local"
 DOCKER_OPTS="$DOCKER_OPTS $RUNTIME_OPTS"
 DOCKER_OPTS="$DOCKER_OPTS -e NVIDIA_VISIBLE_DEVICES=all"
 DOCKER_OPTS="$DOCKER_OPTS -e CUDA_VISIBLE_DEVICES=$GPU_ID"
@@ -286,8 +288,10 @@ case $MODE in
             $IMAGE_NAME \
             bash -c "
                 echo '📊 Starting BEVNeXt-SAM2 Model Evaluation...' && \
+                echo 'Setting up user environment...' && \
+                mkdir -p /workspace/.local && \
                 echo 'Installing visualization dependencies...' && \
-                pip install opencv-python matplotlib --quiet && \
+                pip install --user opencv-python matplotlib --quiet && \
                 echo 'System Status:' && \
                 python -c 'import torch; print(f\"  • CUDA available: {torch.cuda.is_available()}\"); print(f\"  • GPU count: {torch.cuda.device_count() if torch.cuda.is_available() else 0}\")' && \
                 echo '  • Evaluation mode: Model performance assessment' && \
@@ -331,8 +335,10 @@ case $MODE in
             $IMAGE_NAME \
             bash -c "
                 echo '🎨 Starting BEVNeXt-SAM2 Evaluation Visualization...' && \
+                echo 'Setting up user environment...' && \
+                mkdir -p /workspace/.local && \
                 echo 'Installing visualization dependencies...' && \
-                pip install seaborn --quiet && \
+                pip install --user seaborn --quiet && \
                 echo 'System Status:' && \
                 python -c 'import matplotlib; print(f\"  • Matplotlib: {matplotlib.__version__}\"); import numpy; print(f\"  • NumPy: {numpy.__version__}\"); import torch; print(f\"  • PyTorch: {torch.__version__}\")' && \
                 echo '  • Output directory: /workspace/outputs/evaluation/visualizations/' && \
