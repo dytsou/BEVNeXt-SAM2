@@ -174,8 +174,8 @@ fi
 # Common Docker run options
 DOCKER_OPTS="--rm -it"
 DOCKER_OPTS="$DOCKER_OPTS --user $USER_UID:$USER_GID"
-DOCKER_OPTS="$DOCKER_OPTS -e HOME=/workspace"
-DOCKER_OPTS="$DOCKER_OPTS -e PYTHONUSERBASE=/workspace/.local"
+DOCKER_OPTS="$DOCKER_OPTS -e HOME=/workspace/outputs"
+DOCKER_OPTS="$DOCKER_OPTS -e PYTHONUSERBASE=/workspace/outputs/.local"
 DOCKER_OPTS="$DOCKER_OPTS $RUNTIME_OPTS"
 DOCKER_OPTS="$DOCKER_OPTS -e NVIDIA_VISIBLE_DEVICES=all"
 DOCKER_OPTS="$DOCKER_OPTS -e CUDA_VISIBLE_DEVICES=$GPU_ID"
@@ -289,7 +289,7 @@ case $MODE in
             bash -c "
                 echo '📊 Starting BEVNeXt-SAM2 Model Evaluation...' && \
                 echo 'Setting up user environment...' && \
-                mkdir -p /workspace/.local && \
+                mkdir -p /workspace/outputs/.local && \
                 echo 'Installing visualization dependencies...' && \
                 pip install --user opencv-python matplotlib --quiet && \
                 echo 'System Status:' && \
@@ -336,7 +336,7 @@ case $MODE in
             bash -c "
                 echo '🎨 Starting BEVNeXt-SAM2 Evaluation Visualization...' && \
                 echo 'Setting up user environment...' && \
-                mkdir -p /workspace/.local && \
+                mkdir -p /workspace/outputs/.local && \
                 echo 'Installing visualization dependencies...' && \
                 pip install --user seaborn --quiet && \
                 echo 'System Status:' && \
