@@ -289,8 +289,18 @@ class BEVNeXtSAM2Model(nn.Module):
         return losses
 
 
+# Import the nuScenes dataset
+try:
+    from nuscenes_dataset import NuScenesTrainingDataset, create_nuscenes_dataloader
+    NUSCENES_AVAILABLE = True
+    print("✅ nuScenes dataset module imported successfully")
+except ImportError as e:
+    NUSCENES_AVAILABLE = False
+    print(f"⚠️  nuScenes dataset not available: {e}")
+    print("   Falling back to synthetic data generation")
+
 class SyntheticDataset(Dataset):
-    """Synthetic dataset for training demonstration"""
+    """Synthetic dataset for training demonstration (fallback when nuScenes unavailable)"""
     
     def __init__(self, config: Dict, split: str = 'train'):
         self.config = config
@@ -379,15 +389,66 @@ class Trainer:
         
     def _create_dataloader(self, split: str) -> DataLoader:
         """Create data loader for given split"""
-        dataset = SyntheticDataset(self.config, split)
         
-        return DataLoader(
-            dataset,
-            batch_size=self.config['batch_size'],
-            shuffle=(split == 'train'),
-            num_workers=self.config['num_workers'],
-            pin_memory=True
-        )
+        # Try to use nuScenes dataset if available and data path exists
+        use_nuscenes = False
+        data_root = self.config.get('data_root', 'data/nuscenes')
+        
+        if NUSCENES_AVAILABLE:
+            # Check if nuScenes data directory exists
+            if os.path.exists(data_root):
+                # Check if it has the proper structure (v1.0-trainval or v1.0-mini)
+                version_dirs = [d for d in os.listdir(data_root) if d.startswith('v1.0-')]
+                if version_dirs:
+                    use_nuscenes = True
+                    version = version_dirs[0]  # Use first available version
+                    print(f"✅ Using nuScenes dataset: {version}")
+                else:
+                    print(f"⚠️  nuScenes data directory exists but no version folders found in {data_root}")
+            else:
+                print(f"⚠️  nuScenes data directory not found: {data_root}")
+        
+        if use_nuscenes:
+            try:
+                # Create nuScenes dataset
+                dataset = NuScenesTrainingDataset(
+                    data_root=data_root,
+                    version=version,
+                    split=split,
+                    config=self.config
+                )
+                
+                return DataLoader(
+                    dataset,
+                    batch_size=self.config['batch_size'],
+                    shuffle=(split == 'train'),
+                    num_workers=self.config['num_workers'],
+                    pin_memory=True,
+                    collate_fn=lambda batch: {
+                        'camera_images': torch.stack([item['camera_images'] for item in batch]),
+                        'sam2_masks': torch.stack([item['sam2_masks'] for item in batch]),
+                        'labels': torch.stack([item['labels'] for item in batch]),
+                        'boxes': torch.stack([item['boxes'] for item in batch]),
+                        'valid_mask': torch.stack([item['valid_mask'] for item in batch])
+                    }
+                )
+            except Exception as e:
+                print(f"❌ Failed to create nuScenes dataset: {e}")
+                print("   Falling back to synthetic data generation")
+                use_nuscenes = False
+        
+        if not use_nuscenes:
+            # Fallback to synthetic dataset
+            print("🔄 Using synthetic dataset for training")
+            dataset = SyntheticDataset(self.config, split)
+            
+            return DataLoader(
+                dataset,
+                batch_size=self.config['batch_size'],
+                shuffle=(split == 'train'),
+                num_workers=self.config['num_workers'],
+                pin_memory=True
+            )
     
     def setup_logging(self):
         """Setup logging and tensorboard"""
@@ -653,15 +714,16 @@ def get_gpu_memory_config():
             'num_queries': 1000,
             'bev_size': [128, 128],
             'image_size': [224, 224],
-            'num_cameras': 6,
+            'num_cameras': 6,  # nuScenes has 6 cameras
             'batch_size': 8,
             'learning_rate': 1e-4,
             'weight_decay': 1e-4,
             'num_epochs': 50,
             'num_workers': 8,
-            'num_samples': {'train': 5000, 'val': 1000},
+            'num_samples': {'train': 5000, 'val': 1000},  # Fallback for synthetic data
             'memory_fraction': 0.9,
             'gradient_checkpointing': False,
+            'data_root': '/workspace/data/nuscenes',  # Path to nuScenes data
             'output_dir': '/workspace/outputs/training_gpu_high'
         }
     elif gpu_memory_gb >= 12:
@@ -675,15 +737,16 @@ def get_gpu_memory_config():
             'num_queries': 600,
             'bev_size': [64, 64],
             'image_size': [224, 224],
-            'num_cameras': 6,
+            'num_cameras': 6,  # nuScenes has 6 cameras
             'batch_size': 4,
             'learning_rate': 1e-4,
             'weight_decay': 1e-4,
             'num_epochs': 50,
             'num_workers': 6,
-            'num_samples': {'train': 2000, 'val': 400},
+            'num_samples': {'train': 2000, 'val': 400},  # Fallback for synthetic data
             'memory_fraction': 0.85,
             'gradient_checkpointing': True,
+            'data_root': '/workspace/data/nuscenes',  # Path to nuScenes data
             'output_dir': '/workspace/outputs/training_gpu_mid'
         }
     elif gpu_memory_gb >= 10:
@@ -697,15 +760,16 @@ def get_gpu_memory_config():
             'num_queries': 50,
             'bev_size': [32, 32],
             'image_size': [128, 128],
-            'num_cameras': 4,
+            'num_cameras': 6,  # nuScenes has 6 cameras
             'batch_size': 1,
             'learning_rate': 1e-4,
             'weight_decay': 1e-4,
             'num_epochs': 50,
             'num_workers': 2,
-            'num_samples': {'train': 200, 'val': 50},
+            'num_samples': {'train': 200, 'val': 50},  # Fallback for synthetic data
             'memory_fraction': 0.5,
             'gradient_checkpointing': True,
+            'data_root': '/workspace/data/nuscenes',  # Path to nuScenes data
             'output_dir': '/workspace/outputs/training_gpu_rtx2080ti'
         }
     elif gpu_memory_gb >= 6:
@@ -719,15 +783,16 @@ def get_gpu_memory_config():
             'num_queries': 100,
             'bev_size': [32, 32],
             'image_size': [160, 160],
-            'num_cameras': 4,
+            'num_cameras': 6,  # nuScenes has 6 cameras
             'batch_size': 1,
             'learning_rate': 1e-4,
             'weight_decay': 1e-4,
             'num_epochs': 50,
             'num_workers': 2,
-            'num_samples': {'train': 400, 'val': 80},
+            'num_samples': {'train': 400, 'val': 80},  # Fallback for synthetic data
             'memory_fraction': 0.6,
             'gradient_checkpointing': True,
+            'data_root': '/workspace/data/nuscenes',  # Path to nuScenes data
             'output_dir': '/workspace/outputs/training_gpu_low'
         }
     else:
@@ -741,15 +806,16 @@ def get_gpu_memory_config():
             'num_queries': 100,
             'bev_size': [32, 32],
             'image_size': [224, 224],
-            'num_cameras': 6,
+            'num_cameras': 6,  # nuScenes has 6 cameras
             'batch_size': 1,
             'learning_rate': 1e-4,
             'weight_decay': 1e-4,
             'num_epochs': 50,
             'num_workers': 2,
-            'num_samples': {'train': 500, 'val': 100},
+            'num_samples': {'train': 500, 'val': 100},  # Fallback for synthetic data
             'memory_fraction': 0.6,
             'gradient_checkpointing': True,
+            'data_root': '/workspace/data/nuscenes',  # Path to nuScenes data
             'output_dir': '/workspace/outputs/training_gpu_ultra'
         }
 
@@ -764,15 +830,16 @@ def get_cpu_config():
         'num_queries': 300,
         'bev_size': [32, 32],
         'image_size': [224, 224],
-        'num_cameras': 6,
+        'num_cameras': 6,  # nuScenes has 6 cameras
         'batch_size': 1,
         'learning_rate': 1e-4,
         'weight_decay': 1e-4,
         'num_epochs': 10,
         'num_workers': 0,
-        'num_samples': {'train': 100, 'val': 20},
+        'num_samples': {'train': 100, 'val': 20},  # Fallback for synthetic data
         'memory_fraction': 1.0,
         'gradient_checkpointing': False,
+        'data_root': '/workspace/data/nuscenes',  # Path to nuScenes data
         'output_dir': '/workspace/outputs/training_cpu'
     }
 
