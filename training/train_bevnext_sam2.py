@@ -162,12 +162,31 @@ class BEVNeXtSAM2Model(nn.Module):
         flat_features = flat_features + pos_encoding.unsqueeze(0)
         del pos_encoding  # Free memory
         
-        # Transform features with checkpointing
+        # Transform features with checkpointing and aggressive memory management
         if self.training and self.use_gradient_checkpointing:
-            transformed_features = checkpoint(self.bev_transformer, flat_features, use_reentrant=False)
+            # Use smaller segments for very limited memory
+            if hasattr(self.config, 'memory_fraction') and self.config['memory_fraction'] <= 0.6:
+                # Process in smaller chunks for ultra-low memory GPUs
+                chunk_size = flat_features.size(1) // 4  # Process in quarters
+                chunks = []
+                for i in range(0, flat_features.size(1), chunk_size):
+                    chunk = flat_features[:, i:i+chunk_size]
+                    chunk_out = checkpoint(self.bev_transformer, chunk, use_reentrant=False)
+                    chunks.append(chunk_out)
+                    del chunk, chunk_out
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                transformed_features = torch.cat(chunks, dim=1)
+                del chunks
+            else:
+                transformed_features = checkpoint(self.bev_transformer, flat_features, use_reentrant=False)
         else:
             transformed_features = self.bev_transformer(flat_features)
         del flat_features  # Free memory
+        
+        # Aggressive memory cleanup for low VRAM
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         
         # Object queries (simplified)
         num_queries = self.config['num_queries']
@@ -667,25 +686,47 @@ def get_gpu_memory_config():
             'gradient_checkpointing': True,
             'output_dir': '/workspace/outputs/training_gpu_mid'
         }
-    elif gpu_memory_gb >= 6:
-        # Low-end GPU (6-12GB) - Conservative
-        print("💡 Using LOW-END GPU configuration (6-12GB VRAM)")
+    elif gpu_memory_gb >= 10:
+        # RTX 2080 Ti / similar (10-12GB) - Very Conservative
+        print("🎯 Using RTX 2080 Ti optimized configuration (10-12GB VRAM)")
         return {
-            'd_model': 128,
-            'nhead': 8,
-            'num_transformer_layers': 4,
+            'd_model': 64,
+            'nhead': 4,
+            'num_transformer_layers': 2,
             'num_classes': 10,
-            'num_queries': 200,
-            'bev_size': [48, 48],
-            'image_size': [224, 224],
-            'num_cameras': 6,
-            'batch_size': 2,
+            'num_queries': 50,
+            'bev_size': [32, 32],
+            'image_size': [128, 128],
+            'num_cameras': 4,
+            'batch_size': 1,
             'learning_rate': 1e-4,
             'weight_decay': 1e-4,
             'num_epochs': 50,
-            'num_workers': 4,
-            'num_samples': {'train': 1000, 'val': 200},
-            'memory_fraction': 0.7,
+            'num_workers': 2,
+            'num_samples': {'train': 200, 'val': 50},
+            'memory_fraction': 0.5,
+            'gradient_checkpointing': True,
+            'output_dir': '/workspace/outputs/training_gpu_rtx2080ti'
+        }
+    elif gpu_memory_gb >= 6:
+        # Low-end GPU (6-10GB) - Conservative
+        print("💡 Using LOW-END GPU configuration (6-10GB VRAM)")
+        return {
+            'd_model': 96,
+            'nhead': 6,
+            'num_transformer_layers': 3,
+            'num_classes': 10,
+            'num_queries': 100,
+            'bev_size': [32, 32],
+            'image_size': [160, 160],
+            'num_cameras': 4,
+            'batch_size': 1,
+            'learning_rate': 1e-4,
+            'weight_decay': 1e-4,
+            'num_epochs': 50,
+            'num_workers': 2,
+            'num_samples': {'train': 400, 'val': 80},
+            'memory_fraction': 0.6,
             'gradient_checkpointing': True,
             'output_dir': '/workspace/outputs/training_gpu_low'
         }
@@ -753,23 +794,34 @@ def apply_memory_optimizations(config):
         
         # Set memory allocation strategy based on GPU tier (more conservative)
         gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
-        if gpu_memory_gb >= 12:
+        if gpu_memory_gb >= 16:
             split_size = 256
+        elif gpu_memory_gb >= 12:
+            split_size = 128
+        elif gpu_memory_gb >= 10:
+            split_size = 32  # Very conservative for RTX 2080 Ti range
         elif gpu_memory_gb >= 8:
-            split_size = 64  # More conservative for 8GB GPUs
+            split_size = 24  # More conservative for 8GB GPUs
         elif gpu_memory_gb >= 6:
-            split_size = 32  # Very conservative for 6-8GB GPUs  
+            split_size = 16  # Very conservative for 6-8GB GPUs  
         else:
-            split_size = 16  # Ultra conservative for <6GB GPUs
+            split_size = 8   # Ultra conservative for <6GB GPUs
             
         os.environ['PYTORCH_CUDA_ALLOC_CONF'] = f'max_split_size_mb:{split_size}'
         print(f"✓ Memory split size set to {split_size}MB")
         
         # Additional memory optimizations for low-end GPUs
-        if gpu_memory_gb < 8:
+        if gpu_memory_gb < 12:
             # Enable memory efficient mode
-            os.environ['PYTORCH_CUDA_ALLOC_CONF'] += ',garbage_collection_threshold:0.6'
-            print("✓ Aggressive garbage collection enabled for low VRAM")
+            if gpu_memory_gb >= 10:
+                gc_threshold = 0.4  # Very aggressive for RTX 2080 Ti range
+            elif gpu_memory_gb >= 8:
+                gc_threshold = 0.5  # Aggressive for 8-10GB range
+            else:
+                gc_threshold = 0.6  # Most aggressive for <8GB
+                
+            os.environ['PYTORCH_CUDA_ALLOC_CONF'] += f',garbage_collection_threshold:{gc_threshold}'
+            print(f"✓ Aggressive garbage collection enabled (threshold: {gc_threshold}) for VRAM optimization")
         
         # Clear cache before starting
         torch.cuda.empty_cache()
