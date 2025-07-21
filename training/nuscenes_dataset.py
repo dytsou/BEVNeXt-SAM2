@@ -46,9 +46,9 @@ class NuScenesTrainingDataset(Dataset):
         # Initialize nuScenes API
         try:
             self.nusc = NuScenes(version=version, dataroot=str(self.data_root), verbose=True)
-            print(f"✅ nuScenes {version} loaded successfully")
+            print(f"nuScenes {version} loaded successfully")
         except Exception as e:
-            print(f"❌ Failed to load nuScenes {version}: {e}")
+            print(f"Failed to load nuScenes {version}: {e}")
             print(f"Make sure the dataset is extracted to: {self.data_root}")
             raise
         
@@ -70,7 +70,7 @@ class NuScenesTrainingDataset(Dataset):
         # Get all samples for the split
         self.samples = self._get_samples_for_split()
         
-        print(f"✅ nuScenes {split} dataset initialized:")
+        print(f"nuScenes {split} dataset initialized:")
         print(f"   └─ Scenes: {len(self.scenes)}")
         print(f"   └─ Samples: {len(self.samples)}")
         

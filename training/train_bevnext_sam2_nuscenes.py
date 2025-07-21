@@ -45,10 +45,10 @@ try:
         NuScenesDataAnalyzer
     )
     NUSCENES_AVAILABLE = True
-    print("✅ Enhanced nuScenes dataset module imported successfully")
+    print("Enhanced nuScenes dataset module imported successfully")
 except ImportError as e:
     NUSCENES_AVAILABLE = False
-    print(f"⚠️  Enhanced nuScenes dataset not available: {e}")
+    print(f"Enhanced nuScenes dataset not available: {e}")
 
 # Configure logging
 logging.basicConfig(
@@ -97,7 +97,7 @@ class EnhancedBEVNeXtSAM2Model(nn.Module):
         
         # Enable gradient checkpointing for memory efficiency
         if self.use_gradient_checkpointing:
-            logger.info("✓ Gradient checkpointing enabled for memory efficiency")
+            logger.info("Gradient checkpointing enabled for memory efficiency")
             self._enable_gradient_checkpointing()
     
     def _build_camera_backbone(self) -> nn.Module:
@@ -537,7 +537,7 @@ class NuScenesTrainer:
         # Setup mixed precision scaler
         if self.use_mixed_precision:
             self.scaler = torch.cuda.amp.GradScaler()
-            logger.info("✓ Mixed precision training enabled")
+            logger.info("Mixed precision training enabled")
         
         # Setup scheduler
         self.scheduler = self._setup_scheduler()

@@ -19,7 +19,7 @@ def install_package(package):
 
 def main():
     """Install all required packages"""
-    print("🔧 Installing nuScenes dependencies...")
+    print("Installing nuScenes dependencies...")
     
     packages = [
         "nuscenes-devkit",  # Official nuScenes devkit
@@ -35,16 +35,16 @@ def main():
     for package in packages:
         print(f"   Installing {package}...")
         if install_package(package):
-            print(f"   ✅ {package} installed successfully")
+            print(f"   {package} installed successfully")
             success_count += 1
         else:
-            print(f"   ❌ Failed to install {package}")
+            print(f"   Failed to install {package}")
     
     print(f"\n📊 Installation summary: {success_count}/{len(packages)} packages installed")
     
     if success_count == len(packages):
-        print("✅ All dependencies installed successfully!")
-        print("\n📁 To use nuScenes dataset, ensure your data is structured as:")
+        print("All dependencies installed successfully!")
+        print("\nTo use nuScenes dataset, ensure your data is structured as:")
         print("   data/nuscenes/")
         print("   ├── samples/")
         print("   ├── sweeps/") 
@@ -54,7 +54,7 @@ def main():
         print("       ├── sample_data.json")
         print("       └── ... (other JSON files)")
     else:
-        print("⚠️  Some dependencies failed to install. Training may fall back to synthetic data.")
+        print("Some dependencies failed to install. Training may fall back to synthetic data.")
     
     return success_count == len(packages)
 

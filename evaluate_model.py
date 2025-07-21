@@ -28,7 +28,7 @@ from nuscenes_loader import load_nuscenes_test_dataset
 
 def create_synthetic_test_dataset(num_samples=100):
     """Create synthetic test dataset for evaluation"""
-    print(f"🔄 Generating synthetic test dataset ({num_samples} samples)...")
+    print(f"Generating synthetic test dataset ({num_samples} samples)...")
     
     test_data = []
     for i in tqdm(range(num_samples), desc="Creating test samples"):
@@ -65,7 +65,7 @@ def create_synthetic_test_dataset(num_samples=100):
         # Simulate processing time
         time.sleep(0.01)
     
-    print(f"✅ Test dataset created with {len(test_data)} samples")
+    print(f"Test dataset created with {len(test_data)} samples")
     return test_data
 
 def create_realistic_camera_images(sample):
@@ -325,7 +325,7 @@ def save_sample_visualizations(sample, prediction, ground_truth, output_dir, sam
 
 def evaluate_detection_metrics(predictions, ground_truths, iou_threshold=0.5):
     """Calculate detection metrics (mAP, Precision, Recall)"""
-    print(f"🔍 Calculating detection metrics (IoU threshold: {iou_threshold})...")
+    print(f"Calculating detection metrics (IoU threshold: {iou_threshold})...")
     
     total_tp = 0
     total_fp = 0
@@ -392,7 +392,7 @@ def evaluate_detection_metrics(predictions, ground_truths, iou_threshold=0.5):
 
 def evaluate_segmentation_metrics(predictions, ground_truths):
     """Calculate segmentation metrics (IoU, Dice, etc.)"""
-    print("🔍 Calculating segmentation metrics...")
+    print("Calculating segmentation metrics...")
     
     total_intersection = 0
     total_union = 0
@@ -442,23 +442,23 @@ def evaluate_segmentation_metrics(predictions, ground_truths):
 
 def load_model_checkpoint(checkpoint_path, device='cuda'):
     """Load trained model from checkpoint"""
-    print(f"🔄 Loading model checkpoint: {checkpoint_path}")
+    print(f"Loading model checkpoint: {checkpoint_path}")
     
     if not os.path.exists(checkpoint_path):
-        print(f"⚠️  Checkpoint not found: {checkpoint_path}")
-        print("📝 Using mock model for evaluation simulation...")
+        print(f"Checkpoint not found: {checkpoint_path}")
+        print("Using mock model for evaluation simulation...")
         return create_mock_model(device)
     
     try:
         # Try to load real checkpoint
         checkpoint = torch.load(checkpoint_path, map_location=device)
-        print(f"✅ Checkpoint loaded successfully")
+        print(f"Checkpoint loaded successfully")
         print(f"   └─ Epoch: {checkpoint.get('epoch', 'Unknown')}")
         print(f"   └─ Training loss: {checkpoint.get('loss', 'Unknown')}")
         return checkpoint
     except Exception as e:
-        print(f"⚠️  Error loading checkpoint: {e}")
-        print("📝 Using mock model for evaluation simulation...")
+        print(f"Error loading checkpoint: {e}")
+        print("Using mock model for evaluation simulation...")
         return create_mock_model(device)
 
 def create_mock_model(device='cuda'):
@@ -472,7 +472,7 @@ def create_mock_model(device='cuda'):
 
 def run_inference(model, test_data, device='cuda', output_dir='outputs/evaluation'):
     """Run inference on test dataset"""
-    print(f"🚀 Running inference on {len(test_data)} test samples...")
+    print(f"Running inference on {len(test_data)} test samples...")
     
     predictions = []
     inference_times = []
@@ -481,7 +481,7 @@ def run_inference(model, test_data, device='cuda', output_dir='outputs/evaluatio
     viz_dir = os.path.join(output_dir, 'sample_visualizations')
     os.makedirs(viz_dir, exist_ok=True)
     
-    print(f"🎨 Generating 3D bounding box visualizations for test samples...")
+    print(f"Generating 3D bounding box visualizations for test samples...")
     
     for i, sample in enumerate(tqdm(test_data, desc="Running inference")):
         start_time = time.time()
@@ -545,10 +545,10 @@ def run_inference(model, test_data, device='cuda', output_dir='outputs/evaluatio
     avg_inference_time = np.mean(inference_times)
     fps = 1.0 / avg_inference_time if avg_inference_time > 0 else 0
     
-    print(f"✅ Inference completed")
+    print(f"Inference completed")
     print(f"   └─ Average inference time: {avg_inference_time:.3f}s")
     print(f"   └─ FPS: {fps:.1f}")
-    print(f"🎨 Sample visualizations saved to: {viz_dir}")
+    print(f"Sample visualizations saved to: {viz_dir}")
     print(f"   └─ Generated images for first 10 test samples")
     print(f"   └─ Each sample shows 3 camera views with 3D bounding boxes")
     
@@ -560,7 +560,7 @@ def run_inference(model, test_data, device='cuda', output_dir='outputs/evaluatio
 
 def generate_evaluation_report(detection_metrics, segmentation_metrics, inference_metrics, output_dir):
     """Generate comprehensive evaluation report"""
-    print("📊 Generating evaluation report...")
+    print("Generating evaluation report...")
     
     report = {
         'evaluation_summary': {
@@ -616,7 +616,7 @@ def generate_evaluation_report(detection_metrics, segmentation_metrics, inferenc
         f.write(f"  • Segmentation: {report['overall_assessment']['segmentation_grade']}\n")
         f.write(f"  • Speed: {report['overall_assessment']['speed_grade']}\n")
     
-    print(f"✅ Evaluation report saved to: {output_dir}")
+    print(f"Evaluation report saved to: {output_dir}")
     return report
 
 def main():
@@ -635,26 +635,26 @@ def main():
     
     args = parser.parse_args()
     
-    print("🎯 BEVNeXt-SAM2 Model Evaluation")
+    print("BEVNeXt-SAM2 Model Evaluation")
     print("=" * 60)
-    print("📊 Comprehensive model performance assessment")
-    print("🔍 Testing detection accuracy, segmentation quality, and inference speed")
+    print("Comprehensive model performance assessment")
+    print("Testing detection accuracy, segmentation quality, and inference speed")
     print("=" * 60)
     
     # Check device
     device = args.device if torch.cuda.is_available() or args.device == 'cpu' else 'cpu'
     if device == 'cuda' and torch.cuda.is_available():
-        print(f"🖥️  Using GPU: {torch.cuda.get_device_name(0)}")
-        print(f"💾 GPU Memory: {torch.cuda.get_device_properties(0).total_memory // 1024**3} GB")
+        print(f"Using GPU: {torch.cuda.get_device_name(0)}")
+        print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory // 1024**3} GB")
     else:
-        print("🖥️  Using CPU")
+        print("Using CPU")
     print()
     
     # Load model
     model = load_model_checkpoint(args.checkpoint, device)
     
     # Create test dataset from real nuScenes data
-    print("📂 Loading real nuScenes dataset...")
+    print("Loading real nuScenes dataset...")
     test_data = load_nuscenes_test_dataset(data_root="data", num_samples=args.test_samples)
     
     # Run inference
@@ -681,37 +681,37 @@ def main():
     
     # Print summary
     print("\n" + "=" * 60)
-    print("📊 EVALUATION SUMMARY")
+    print("EVALUATION SUMMARY")
     print("=" * 60)
     
-    print("🎯 Detection Performance:")
+    print("Detection Performance:")
     print(f"   mAP@0.5: {detection_metrics['mAP@0.5']:.3f}")
     print(f"   mAP@0.75: {detection_metrics['mAP@0.75']:.3f}")  
     print(f"   mAP@0.5:0.95: {detection_metrics['mAP@0.5:0.95']:.3f}")
     print(f"   Precision: {detection_metrics['precision']:.3f}")
     print(f"   Recall: {detection_metrics['recall']:.3f}")
     
-    print("\n🎨 Segmentation Performance:")
+    print("\nSegmentation Performance:")
     print(f"   Mean IoU: {segmentation_metrics['mean_iou']:.3f}")
     print(f"   Dice Coefficient: {segmentation_metrics['dice_coefficient']:.3f}")
     print(f"   Pixel Accuracy: {segmentation_metrics['pixel_accuracy']:.3f}")
     
-    print("\n⚡ Inference Performance:")
+    print("\nInference Performance:")
     print(f"   Average Time: {inference_metrics['avg_inference_time']:.3f}s")
     print(f"   FPS: {inference_metrics['fps']:.1f}")
     
-    print("\n🏆 Overall Grades:")
+    print("\nOverall Grades:")
     print(f"   Detection: {report['overall_assessment']['detection_grade']}")
     print(f"   Segmentation: {report['overall_assessment']['segmentation_grade']}")
     print(f"   Speed: {report['overall_assessment']['speed_grade']}")
     
-    print(f"\n📁 Results saved to: {args.output_dir}")
-    print(f"🎨 3D Bounding Box Visualizations:")
+    print(f"\nResults saved to: {args.output_dir}")
+    print(f"3D Bounding Box Visualizations:")
     print(f"   └─ Real nuScenes images with overlaid 3D boxes: {args.output_dir}/sample_visualizations/")
     print(f"   └─ Green boxes: Ground Truth | Red boxes: Predictions")
     print(f"   └─ Generated for first 10 nuScenes samples (3 camera views each)")
     print(f"   └─ Camera views: CAM_FRONT, CAM_FRONT_LEFT, CAM_FRONT_RIGHT")
-    print("🎉 Evaluation completed successfully!")
+    print("Evaluation completed successfully!")
     
     return report
 

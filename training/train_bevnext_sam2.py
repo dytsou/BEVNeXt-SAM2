@@ -293,10 +293,10 @@ class BEVNeXtSAM2Model(nn.Module):
 try:
     from nuscenes_dataset import NuScenesTrainingDataset, create_nuscenes_dataloader
     NUSCENES_AVAILABLE = True
-    print("✅ nuScenes dataset module imported successfully")
+    print("nuScenes dataset module imported successfully")
 except ImportError as e:
     NUSCENES_AVAILABLE = False
-    print(f"⚠️  nuScenes dataset not available: {e}")
+    print(f"nuScenes dataset not available: {e}")
     print("   Falling back to synthetic data generation")
 
 class SyntheticDataset(Dataset):
@@ -354,9 +354,9 @@ class Trainer:
             # Compile model for faster training (PyTorch 2.0+)
             try:
                 self.model = torch.compile(self.model)
-                print("✓ Model compiled for faster training")
+                print("Model compiled for faster training")
             except:
-                print("⚠ Model compilation not available, continuing without")
+                print("Model compilation not available, continuing without")
         
         # Setup optimizer
         self.optimizer = optim.AdamW(
@@ -368,7 +368,7 @@ class Trainer:
         # Setup mixed precision scaler
         if self.use_mixed_precision:
             self.scaler = torch.cuda.amp.GradScaler()
-            print("✓ Mixed precision training enabled")
+            print("Mixed precision training enabled")
         
         # Setup scheduler
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
@@ -402,11 +402,11 @@ class Trainer:
                 if version_dirs:
                     use_nuscenes = True
                     version = version_dirs[0]  # Use first available version
-                    print(f"✅ Using nuScenes dataset: {version}")
+                    print(f"Using nuScenes dataset: {version}")
                 else:
-                    print(f"⚠️  nuScenes data directory exists but no version folders found in {data_root}")
+                    print(f"nuScenes data directory exists but no version folders found in {data_root}")
             else:
-                print(f"⚠️  nuScenes data directory not found: {data_root}")
+                print(f"nuScenes data directory not found: {data_root}")
         
         if use_nuscenes:
             try:
@@ -433,13 +433,13 @@ class Trainer:
                     }
                 )
             except Exception as e:
-                print(f"❌ Failed to create nuScenes dataset: {e}")
+                print(f"Failed to create nuScenes dataset: {e}")
                 print("   Falling back to synthetic data generation")
                 use_nuscenes = False
         
         if not use_nuscenes:
             # Fallback to synthetic dataset
-            print("🔄 Using synthetic dataset for training")
+            print("Using synthetic dataset for training")
             dataset = SyntheticDataset(self.config, split)
             
             return DataLoader(
@@ -701,11 +701,11 @@ def get_gpu_memory_config():
     # Get GPU memory in GB
     gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
     
-    print(f"🔍 Detected GPU memory: {gpu_memory_gb:.1f} GB")
+    print(f"Detected GPU memory: {gpu_memory_gb:.1f} GB")
     
     if gpu_memory_gb >= 20:
         # High-end GPU (>= 20GB) - Full capacity
-        print("🚀 Using HIGH-END GPU configuration (>=20GB VRAM)")
+        print("Using HIGH-END GPU configuration (>=20GB VRAM)")
         return {
             'd_model': 512,
             'nhead': 16,
@@ -728,7 +728,7 @@ def get_gpu_memory_config():
         }
     elif gpu_memory_gb >= 12:
         # Mid-range GPU (12-20GB) - Balanced
-        print("⚡ Using MID-RANGE GPU configuration (12-20GB VRAM)")
+        print("Using MID-RANGE GPU configuration (12-20GB VRAM)")
         return {
             'd_model': 256,
             'nhead': 8,
@@ -751,7 +751,7 @@ def get_gpu_memory_config():
         }
     elif gpu_memory_gb >= 10:
         # RTX 2080 Ti / similar (10-12GB) - Very Conservative
-        print("🎯 Using RTX 2080 Ti optimized configuration (10-12GB VRAM)")
+        print("Using RTX 2080 Ti optimized configuration (10-12GB VRAM)")
         return {
             'd_model': 64,
             'nhead': 4,
@@ -774,7 +774,7 @@ def get_gpu_memory_config():
         }
     elif gpu_memory_gb >= 6:
         # Low-end GPU (6-10GB) - Conservative
-        print("💡 Using LOW-END GPU configuration (6-10GB VRAM)")
+        print("Using LOW-END GPU configuration (6-10GB VRAM)")
         return {
             'd_model': 96,
             'nhead': 6,
@@ -797,7 +797,7 @@ def get_gpu_memory_config():
         }
     else:
         # Ultra low-end GPU (<6GB) - Minimal
-        print("🔋 Using ULTRA-LOW GPU configuration (<6GB VRAM)")
+        print("Using ULTRA-LOW GPU configuration (<6GB VRAM)")
         return {
             'd_model': 64,
             'nhead': 4,
@@ -821,7 +821,7 @@ def get_gpu_memory_config():
 
 def get_cpu_config():
     """Get CPU-optimized configuration"""
-    print("🖥️  Using CPU configuration")
+    print("Using CPU configuration")
     return {
         'd_model': 128,
         'nhead': 4,
@@ -850,14 +850,14 @@ def apply_memory_optimizations(config):
         
         # Set memory fraction
         torch.cuda.set_per_process_memory_fraction(memory_fraction)
-        print(f"✓ GPU memory fraction set to {memory_fraction}")
+        print(f"GPU memory fraction set to {memory_fraction}")
         
         # Enable memory efficient attention if available
         try:
             torch.backends.cuda.enable_flash_sdp(True)
-            print("✓ Flash attention enabled for memory efficiency")
+            print("Flash attention enabled for memory efficiency")
         except:
-            print("⚠ Flash attention not available, using standard attention")
+            print("Flash attention not available, using standard attention")
         
         # Set memory allocation strategy based on GPU tier (more conservative)
         gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
@@ -875,7 +875,7 @@ def apply_memory_optimizations(config):
             split_size = 8   # Ultra conservative for <6GB GPUs
             
         os.environ['PYTORCH_CUDA_ALLOC_CONF'] = f'max_split_size_mb:{split_size}'
-        print(f"✓ Memory split size set to {split_size}MB")
+        print(f"Memory split size set to {split_size}MB")
         
         # Additional memory optimizations for low-end GPUs
         if gpu_memory_gb < 12:
@@ -888,11 +888,11 @@ def apply_memory_optimizations(config):
                 gc_threshold = 0.6  # Most aggressive for <8GB
                 
             os.environ['PYTORCH_CUDA_ALLOC_CONF'] += f',garbage_collection_threshold:{gc_threshold}'
-            print(f"✓ Aggressive garbage collection enabled (threshold: {gc_threshold}) for VRAM optimization")
+            print(f"Aggressive garbage collection enabled (threshold: {gc_threshold}) for VRAM optimization")
         
         # Clear cache before starting
         torch.cuda.empty_cache()
-        print("✓ GPU cache cleared")
+        print("GPU cache cleared")
 
 def get_default_config():
     """Get default training configuration (backwards compatibility)"""
@@ -908,16 +908,16 @@ def main():
     
     # Load config with dynamic GPU detection
     if args.config and args.force_config:
-        print("🔧 Using forced configuration from file")
+        print("Using forced configuration from file")
         with open(args.config, 'r') as f:
             config = json.load(f)
     elif args.config:
         try:
             with open(args.config, 'r') as f:
                 config = json.load(f)
-            print("📁 Using configuration from file")
+            print("Using configuration from file")
         except:
-            print("⚠️  Config file error, falling back to auto-detection")
+            print("Config file error, falling back to auto-detection")
             config = get_gpu_memory_config()
     else:
         config = get_gpu_memory_config()
@@ -927,7 +927,7 @@ def main():
     
     # Print GPU information
     if torch.cuda.is_available():
-        print(f"✓ CUDA available - {torch.cuda.device_count()} GPU(s) detected")
+        print(f"CUDA available - {torch.cuda.device_count()} GPU(s) detected")
         for i in range(torch.cuda.device_count()):
             props = torch.cuda.get_device_properties(i)
             print(f"  GPU {i}: {props.name} ({props.total_memory // 1024**2} MB)")
@@ -939,10 +939,10 @@ def main():
         print(f"  Memory allocated: {allocated:.1f} MB")
         print(f"  Memory reserved: {reserved:.1f} MB")
     else:
-        print("⚠ CUDA not available - using CPU")
+        print("CUDA not available - using CPU")
     
     # Print configuration summary
-    print(f"\n📊 Configuration Summary:")
+    print(f"\nConfiguration Summary:")
     print(f"  Model size: {config['d_model']}d, {config['num_transformer_layers']} layers")
     print(f"  BEV resolution: {config['bev_size'][0]}×{config['bev_size'][1]}")
     print(f"  Batch size: {config['batch_size']}")

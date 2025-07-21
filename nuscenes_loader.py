@@ -53,7 +53,7 @@ class NuScenesLoader:
             'CAM_BACK', 'CAM_BACK_RIGHT', 'CAM_BACK_LEFT'
         ]
         
-        print(f"✅ nuScenes {version} dataset loaded:")
+        print(f"nuScenes {version} dataset loaded:")
         print(f"   └─ Samples: {len(self.sample)}")
         print(f"   └─ Annotations: {len(self.sample_annotation)}")
         print(f"   └─ Categories: {len(self.category)}")
@@ -279,7 +279,7 @@ class NuScenesLoader:
     
     def create_evaluation_dataset(self, num_samples: int = 50) -> List[Dict]:
         """Create evaluation dataset from nuScenes samples"""
-        print(f"🔄 Loading nuScenes dataset samples ({num_samples} samples)...")
+        print(f"Loading nuScenes dataset samples ({num_samples} samples)...")
         
         dataset = []
         max_samples = min(num_samples, len(self.sample))
@@ -298,7 +298,7 @@ class NuScenesLoader:
                 print(f"Warning: Could not load sample {i}: {e}")
                 continue
         
-        print(f"✅ nuScenes dataset loaded with {len(dataset)} samples")
+        print(f"nuScenes dataset loaded with {len(dataset)} samples")
         return dataset
 
 def load_nuscenes_test_dataset(data_root: str = "data", num_samples: int = 50) -> List[Dict]:

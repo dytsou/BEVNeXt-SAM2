@@ -289,9 +289,9 @@ class NuScenesMultiModalDataset(Dataset):
                 dataroot=str(config.data_root), 
                 verbose=verbose
             )
-            logger.info(f"✅ nuScenes {config.version} loaded successfully")
+            logger.info(f"nuScenes {config.version} loaded successfully")
         except Exception as e:
-            logger.error(f"❌ Failed to load nuScenes {config.version}: {e}")
+            logger.error(f"Failed to load nuScenes {config.version}: {e}")
             raise
         
         # Initialize token manager and analyzer
@@ -301,7 +301,7 @@ class NuScenesMultiModalDataset(Dataset):
         # Get dataset statistics
         if verbose:
             stats = self.analyzer.get_dataset_statistics()
-            logger.info(f"📊 Dataset Statistics:")
+            logger.info(f"Dataset Statistics:")
             logger.info(f"   Total scenes: {stats['total_scenes']}")
             logger.info(f"   Total samples: {stats['total_samples']}")
             logger.info(f"   Total annotations: {stats['total_annotations']}")
@@ -310,7 +310,7 @@ class NuScenesMultiModalDataset(Dataset):
         self.scene_tokens = self._get_scene_tokens_for_split()
         self.sample_tokens = self._get_sample_tokens_for_split()
         
-        logger.info(f"✅ nuScenes {split} dataset initialized:")
+        logger.info(f"nuScenes {split} dataset initialized:")
         logger.info(f"   └─ Scenes: {len(self.scene_tokens)}")
         logger.info(f"   └─ Samples: {len(self.sample_tokens)}")
         

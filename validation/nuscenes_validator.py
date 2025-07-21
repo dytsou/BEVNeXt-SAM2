@@ -825,13 +825,13 @@ if __name__ == "__main__":
         # Quick summary
         overall_score = report.quality_scores['overall']
         if overall_score >= 90:
-            logger.info("✅ Dataset validation PASSED - Excellent quality")
+            logger.info("Dataset validation PASSED - Excellent quality")
         elif overall_score >= 70:
-            logger.info("✅ Dataset validation PASSED - Good quality")
+            logger.info("Dataset validation PASSED - Good quality")
         elif overall_score >= 50:
-            logger.info("⚠️  Dataset validation PASSED with warnings - Fair quality")
+            logger.info("Dataset validation PASSED with warnings - Fair quality")
         else:
-            logger.error("❌ Dataset validation FAILED - Poor quality")
+            logger.error("Dataset validation FAILED - Poor quality")
             
     except Exception as e:
         logger.error(f"Validation failed: {e}")

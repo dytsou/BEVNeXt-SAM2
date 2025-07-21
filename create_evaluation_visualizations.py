@@ -64,7 +64,7 @@ def create_performance_dashboard(eval_data, output_dir):
     ]
     colors = plt.cm.Set3(np.linspace(0, 1, len(detection_names)))
     bars1 = ax1.bar(detection_names, detection_values, color=colors)
-    ax1.set_title('🎯 Detection Performance', fontsize=14, fontweight='bold')
+    ax1.set_title('Detection Performance', fontsize=14, fontweight='bold')
     ax1.set_ylabel('Score')
     ax1.set_ylim(0, 1)
     plt.xticks(rotation=45, ha='right')
@@ -83,7 +83,7 @@ def create_performance_dashboard(eval_data, output_dir):
         segmentation_metrics['pixel_accuracy']
     ]
     bars2 = ax2.bar(seg_names, seg_values, color=['#FF6B6B', '#4ECDC4', '#45B7D1'])
-    ax2.set_title('🎨 Segmentation Performance', fontsize=14, fontweight='bold')
+    ax2.set_title('Segmentation Performance', fontsize=14, fontweight='bold')
     ax2.set_ylabel('Score')
     ax2.set_ylim(0, 1)
     
@@ -102,7 +102,7 @@ def create_performance_dashboard(eval_data, output_dir):
     inf_values_norm = [inference_metrics['avg_inference_time'], normalized_fps]
     
     bars3 = ax3.bar(inf_names, inf_values_norm, color=['#96CEB4', '#FFEAA7'])
-    ax3.set_title('⚡ Inference Performance', fontsize=14, fontweight='bold')
+    ax3.set_title('Inference Performance', fontsize=14, fontweight='bold')
     ax3.set_ylabel('Normalized Score')
     ax3.set_ylim(0, 1)
     
@@ -124,7 +124,7 @@ def create_performance_dashboard(eval_data, output_dir):
     colors_pie = ['#2ECC71', '#F39C12', '#E74C3C'][:len(grade_values)]
     
     ax4.pie(grade_values, labels=grade_labels, autopct='%1.0f%%', startangle=90, colors=colors_pie)
-    ax4.set_title('🏆 Overall Grades Distribution', fontsize=14, fontweight='bold')
+    ax4.set_title('Overall Grades Distribution', fontsize=14, fontweight='bold')
     
     # 5. Performance Radar Chart
     ax5 = plt.subplot(2, 4, 5, projection='polar')
@@ -148,7 +148,7 @@ def create_performance_dashboard(eval_data, output_dir):
     ax5.set_xticks(angles[:-1])
     ax5.set_xticklabels(categories)
     ax5.set_ylim(0, 1)
-    ax5.set_title('📊 Performance Radar', fontsize=14, fontweight='bold', pad=20)
+    ax5.set_title('Performance Radar', fontsize=14, fontweight='bold', pad=20)
     ax5.grid(True)
     
     # 6. Metric Comparison with Benchmarks
@@ -166,7 +166,7 @@ def create_performance_dashboard(eval_data, output_dir):
     ax6.bar(x, our_values, width, label='BEVNeXt-SAM2', color='#3498DB')
     ax6.bar(x + width, good_values, width, label='Target', color='#2ECC71')
     
-    ax6.set_title('📈 Benchmark Comparison', fontsize=14, fontweight='bold')
+    ax6.set_title('Benchmark Comparison', fontsize=14, fontweight='bold')
     ax6.set_ylabel('Performance Score')
     ax6.set_xticks(x)
     ax6.set_xticklabels(metrics)
@@ -183,7 +183,7 @@ def create_performance_dashboard(eval_data, output_dir):
     
     ax7.plot(epochs, map_curve, label='mAP@0.5', linewidth=2, color='#E74C3C')
     ax7.plot(epochs, iou_curve, label='Mean IoU', linewidth=2, color='#3498DB')
-    ax7.set_title('📈 Training Progress (Simulated)', fontsize=14, fontweight='bold')
+    ax7.set_title('Training Progress (Simulated)', fontsize=14, fontweight='bold')
     ax7.set_xlabel('Epoch')
     ax7.set_ylabel('Performance')
     ax7.legend()
@@ -209,14 +209,14 @@ def create_performance_dashboard(eval_data, output_dir):
     
     ax8.text(0.1, 0.9, info_text, transform=ax8.transAxes, fontsize=11,
              verticalalignment='top', bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
-    ax8.set_title('ℹ️ System Info', fontsize=14, fontweight='bold')
+    ax8.set_title('System Info', fontsize=14, fontweight='bold')
     
     plt.tight_layout()
     
     # Save dashboard
     dashboard_path = os.path.join(output_dir, 'performance_dashboard.png')
     plt.savefig(dashboard_path, dpi=300, bbox_inches='tight')
-    print(f"✅ Performance dashboard saved: {dashboard_path}")
+    print(f"Performance dashboard saved: {dashboard_path}")
     
     return fig
 
@@ -289,7 +289,7 @@ def create_detailed_charts(eval_data, output_dir):
     plt.tight_layout()
     detailed_path = os.path.join(output_dir, 'detailed_metrics.png')
     plt.savefig(detailed_path, dpi=300, bbox_inches='tight')
-    print(f"✅ Detailed charts saved: {detailed_path}")
+    print(f"Detailed charts saved: {detailed_path}")
 
 def create_sample_visualizations(output_dir):
     """Create sample prediction visualizations"""
@@ -337,7 +337,7 @@ def create_sample_visualizations(output_dir):
     plt.tight_layout()
     samples_path = os.path.join(output_dir, 'sample_predictions.png')
     plt.savefig(samples_path, dpi=300, bbox_inches='tight')
-    print(f"✅ Sample visualizations saved: {samples_path}")
+    print(f"Sample visualizations saved: {samples_path}")
 
 def create_3d_visualization_placeholder(output_dir):
     """Create 3D visualization placeholder"""
@@ -422,7 +422,7 @@ def create_3d_visualization_placeholder(output_dir):
     plt.tight_layout()
     viz_3d_path = os.path.join(output_dir, '3d_visualization.png')
     plt.savefig(viz_3d_path, dpi=300, bbox_inches='tight')
-    print(f"✅ 3D visualization saved: {viz_3d_path}")
+    print(f"3D visualization saved: {viz_3d_path}")
 
 def generate_html_report(eval_data, output_dir):
     """Generate an interactive HTML report"""
@@ -525,27 +525,27 @@ def generate_html_report(eval_data, output_dir):
 <body>
     <div class="container">
         <div class="header">
-            <h1>🚗 BEVNeXt-SAM2 Evaluation Report</h1>
+            <h1>BEVNeXt-SAM2 Evaluation Report</h1>
             <p>Comprehensive Model Performance Assessment</p>
         </div>
         
         <div class="metric-grid">
             <div class="metric-card">
-                <h3>🎯 Detection Performance</h3>
+                <h3>Detection Performance</h3>
                 <div class="metric-value">{eval_data['detection_performance']['mAP@0.5']:.3f}</div>
                 <p>mAP@0.5</p>
                 <div class="grade-badge grade-{eval_data['overall_assessment']['detection_grade']}">Grade {eval_data['overall_assessment']['detection_grade']}</div>
             </div>
             
             <div class="metric-card">
-                <h3>🎨 Segmentation Performance</h3>
+                <h3>Segmentation Performance</h3>
                 <div class="metric-value">{eval_data['segmentation_performance']['mean_iou']:.3f}</div>
                 <p>Mean IoU</p>
                 <div class="grade-badge grade-{eval_data['overall_assessment']['segmentation_grade']}">Grade {eval_data['overall_assessment']['segmentation_grade']}</div>
             </div>
             
             <div class="metric-card">
-                <h3>⚡ Inference Speed</h3>
+                <h3>Inference Speed</h3>
                 <div class="metric-value">{eval_data['inference_performance']['fps']:.1f}</div>
                 <p>FPS</p>
                 <div class="grade-badge grade-{eval_data['overall_assessment']['speed_grade']}">Grade {eval_data['overall_assessment']['speed_grade']}</div>
@@ -554,7 +554,7 @@ def generate_html_report(eval_data, output_dir):
         
         <div class="metric-grid">
             <div class="metric-card">
-                <h3>📊 Detailed Detection Metrics</h3>
+                <h3>Detailed Detection Metrics</h3>
                 <p><strong>mAP@0.75:</strong> {eval_data['detection_performance']['mAP@0.75']:.3f}</p>
                 <p><strong>mAP@0.5:0.95:</strong> {eval_data['detection_performance']['mAP@0.5:0.95']:.3f}</p>
                 <p><strong>Precision:</strong> {eval_data['detection_performance']['precision']:.3f}</p>
@@ -563,14 +563,14 @@ def generate_html_report(eval_data, output_dir):
             </div>
             
             <div class="metric-card">
-                <h3>🔍 Detailed Segmentation Metrics</h3>
+                <h3>Detailed Segmentation Metrics</h3>
                 <p><strong>Mean IoU:</strong> {eval_data['segmentation_performance']['mean_iou']:.3f}</p>
                 <p><strong>Dice Coefficient:</strong> {eval_data['segmentation_performance']['dice_coefficient']:.3f}</p>
                 <p><strong>Pixel Accuracy:</strong> {eval_data['segmentation_performance']['pixel_accuracy']:.3f}</p>
             </div>
             
             <div class="metric-card">
-                <h3>🖥️ System Information</h3>
+                <h3>System Information</h3>
                 <p><strong>GPU:</strong> RTX 4060 Laptop (7GB)</p>
                 <p><strong>Test Samples:</strong> {eval_data['evaluation_summary']['total_samples']}</p>
                 <p><strong>Avg Inference Time:</strong> {eval_data['inference_performance']['avg_inference_time']:.3f}s</p>
@@ -579,22 +579,22 @@ def generate_html_report(eval_data, output_dir):
         
         <div class="image-gallery">
             <div class="image-card">
-                <h3>📊 Performance Dashboard</h3>
+                <h3>Performance Dashboard</h3>
                 <img src="performance_dashboard.png" alt="Performance Dashboard">
             </div>
             
             <div class="image-card">
-                <h3>📈 Detailed Metrics</h3>
+                <h3>Detailed Metrics</h3>
                 <img src="detailed_metrics.png" alt="Detailed Metrics">
             </div>
             
             <div class="image-card">
-                <h3>🖼️ Sample Predictions</h3>
+                <h3>Sample Predictions</h3>
                 <img src="sample_predictions.png" alt="Sample Predictions">
             </div>
             
             <div class="image-card">
-                <h3>🌐 3D Visualization</h3>
+                    <h3>3D Visualization</h3>
                 <img src="3d_visualization.png" alt="3D Visualization">
             </div>
         </div>
@@ -611,7 +611,7 @@ def generate_html_report(eval_data, output_dir):
     with open(html_path, 'w') as f:
         f.write(html_content)
     
-    print(f"✅ Interactive HTML report saved: {html_path}")
+    print(f"Interactive HTML report saved: {html_path}")
 
 def main():
     """Main visualization function"""
@@ -623,48 +623,48 @@ def main():
     # Create visualization directory
     os.makedirs(viz_dir, exist_ok=True)
     
-    print("🎨 BEVNeXt-SAM2 Evaluation Visualization Generator")
+    print("BEVNeXt-SAM2 Evaluation Visualization Generator")
     print("=" * 60)
-    print("📊 Creating comprehensive visualizations from evaluation results...")
+    print("Creating comprehensive visualizations from evaluation results...")
     print()
     
     try:
         # Load evaluation data
-        print("📂 Loading evaluation data...")
+        print("Loading evaluation data...")
         eval_data = load_evaluation_data(eval_dir)
         
         # Create visualizations
-        print("🎯 Creating performance dashboard...")
+        print("Creating performance dashboard...")
         create_performance_dashboard(eval_data, viz_dir)
         
-        print("📊 Creating detailed charts...")
+        print("Creating detailed charts...")
         create_detailed_charts(eval_data, viz_dir)
         
-        print("🖼️ Creating sample visualizations...")
+        print("Creating sample visualizations...")
         create_sample_visualizations(viz_dir)
         
-        print("🌐 Creating 3D visualization...")
+        print("Creating 3D visualization...")
         create_3d_visualization_placeholder(viz_dir)
         
-        print("📄 Generating HTML report...")
+        print("Generating HTML report...")
         generate_html_report(eval_data, viz_dir)
         
         print("\n" + "=" * 60)
-        print("✅ VISUALIZATION COMPLETE!")
+        print("VISUALIZATION COMPLETE!")
         print("=" * 60)
-        print(f"📁 All visualizations saved to: {viz_dir}")
+        print(f"All visualizations saved to: {viz_dir}")
         print()
         print("Generated files:")
-        print("  📊 performance_dashboard.png - Main performance overview")
-        print("  📈 detailed_metrics.png - Detailed metric breakdowns")
-        print("  🖼️ sample_predictions.png - Sample prediction visualizations")
-        print("  🌐 3d_visualization.png - 3D point cloud and BEV views")
-        print("  📄 evaluation_report.html - Interactive HTML report")
+        print("  performance_dashboard.png - Main performance overview")
+        print("  detailed_metrics.png - Detailed metric breakdowns")
+        print("  sample_predictions.png - Sample prediction visualizations")
+        print("  3d_visualization.png - 3D point cloud and BEV views")
+        print("  evaluation_report.html - Interactive HTML report")
         print()
-        print("🌐 Open evaluation_report.html in your browser for an interactive view!")
+        print("Open evaluation_report.html in your browser for an interactive view!")
         
     except Exception as e:
-        print(f"❌ Error creating visualizations: {e}")
+        print(f"Error creating visualizations: {e}")
         return False
     
     return True

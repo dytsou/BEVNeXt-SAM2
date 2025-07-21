@@ -34,7 +34,7 @@ try:
     NUSCENES_AVAILABLE = True
 except ImportError:
     NUSCENES_AVAILABLE = False
-    print("❌ nuScenes devkit not available")
+    print("nuScenes devkit not available")
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -56,15 +56,15 @@ class NuScenesDataAnalyzer:
         self.version = version
         self.verbose = verbose
         
-        print(f"🔄 Loading nuScenes {version} from {data_root}...")
+        print(f"Loading nuScenes {version} from {data_root}...")
         self.nusc = NuScenes(version=version, dataroot=str(data_root), verbose=verbose)
-        print(f"✅ nuScenes {version} loaded successfully")
+        print(f"nuScenes {version} loaded successfully")
         
         self.analysis_results = {}
     
     def run_complete_analysis(self) -> Dict[str, Any]:
         """Run complete dataset analysis"""
-        print("📊 Running comprehensive nuScenes dataset analysis...")
+        print("Running comprehensive nuScenes dataset analysis...")
         
         analyses = [
             ("Basic Statistics", self.analyze_basic_statistics),
@@ -78,10 +78,10 @@ class NuScenesDataAnalyzer:
         ]
         
         for name, analysis_func in analyses:
-            print(f"   🔍 {name}...")
+            print(f"   {name}...")
             self.analysis_results[name.lower().replace(' ', '_')] = analysis_func()
         
-        print("✅ Analysis complete!")
+        print("Analysis complete!")
         return self.analysis_results
     
     def analyze_basic_statistics(self) -> Dict[str, Any]:
@@ -533,7 +533,7 @@ class NuScenesDataAnalyzer:
         output_path = Path(output_dir)
         output_path.mkdir(exist_ok=True)
         
-        print(f"📊 Generating visualizations in {output_dir}...")
+        print(f"Generating visualizations in {output_dir}...")
         
         # Scene length distribution
         if 'scene_distribution' in self.analysis_results:
@@ -551,7 +551,7 @@ class NuScenesDataAnalyzer:
         if 'temporal_distribution' in self.analysis_results:
             self._plot_temporal_distribution(output_path)
         
-        print("✅ Visualizations generated!")
+        print("Visualizations generated!")
     
     def _plot_scene_distribution(self, output_path: Path):
         """Plot scene distribution visualizations"""
@@ -682,7 +682,7 @@ class NuScenesDataAnalyzer:
         
         if 'basic_statistics' in self.analysis_results:
             stats = self.analysis_results['basic_statistics']
-            print(f"\n📊 BASIC STATISTICS:")
+            print(f"\nBASIC STATISTICS:")
             print(f"   Total Scenes:      {stats['total_scenes']:,}")
             print(f"   Total Samples:     {stats['total_samples']:,}")
             print(f"   Total Annotations: {stats['total_annotations']:,}")
@@ -691,13 +691,13 @@ class NuScenesDataAnalyzer:
         
         if 'scene_distribution' in self.analysis_results:
             scene_data = self.analysis_results['scene_distribution']
-            print(f"\n🌍 SCENE DISTRIBUTION:")
+            print(f"\nSCENE DISTRIBUTION:")
             print(f"   Locations: {list(scene_data['location_distribution'].keys())}")
             print(f"   Scene Length: {scene_data['scene_statistics']['mean_length']:.1f} ± {scene_data['scene_statistics']['std_length']:.1f} samples")
         
         if 'object_categories' in self.analysis_results:
             cat_data = self.analysis_results['object_categories']
-            print(f"\n🚗 OBJECT CATEGORIES:")
+            print(f"\nOBJECT CATEGORIES:")
             print(f"   Total Categories: {cat_data['num_categories']}")
             top_categories = sorted(cat_data['category_percentages'].items(), key=lambda x: x[1], reverse=True)[:5]
             for cat, pct in top_categories:
@@ -705,7 +705,7 @@ class NuScenesDataAnalyzer:
         
         if 'data_quality' in self.analysis_results:
             quality = self.analysis_results['data_quality']
-            print(f"\n✅ DATA QUALITY:")
+            print(f"\nDATA QUALITY:")
             print(f"   Overall Quality Score: {quality['overall_quality_score']:.1f}/100")
         
         print("\n" + "="*80)
@@ -723,7 +723,7 @@ def main():
     args = parser.parse_args()
     
     if not NUSCENES_AVAILABLE:
-        print("❌ nuScenes devkit not available. Please install: pip install nuscenes-devkit")
+        print("nuScenes devkit not available. Please install: pip install nuscenes-devkit")
         return
     
     try:
@@ -746,7 +746,7 @@ def main():
             analyzer.save_results(output_file)
         
     except Exception as e:
-        print(f"❌ Analysis failed: {e}")
+        print(f"Analysis failed: {e}")
         import traceback
         traceback.print_exc()
 

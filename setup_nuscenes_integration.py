@@ -32,11 +32,11 @@ class NuScenesIntegrationManager:
         
     def setup_environment(self) -> bool:
         """Setup environment for nuScenes integration"""
-        logger.info("🔧 Setting up nuScenes integration environment...")
+        logger.info("Setting up nuScenes integration environment...")
         
         # Check if nuScenes data directory exists
         if not self.data_root.exists():
-            logger.error(f"❌ nuScenes data directory not found: {self.data_root}")
+            logger.error(f"nuScenes data directory not found: {self.data_root}")
             logger.info("Please ensure nuScenes dataset is extracted to the correct location.")
             return False
         
@@ -49,7 +49,7 @@ class NuScenesIntegrationManager:
                 self.version = available_versions[0]
                 logger.info(f"Using available version: {self.version}")
             else:
-                logger.error("❌ No nuScenes version directories found")
+                logger.error("No nuScenes version directories found")
                 return False
         
         # Install dependencies
@@ -60,12 +60,12 @@ class NuScenesIntegrationManager:
         if not self._verify_installation():
             return False
         
-        logger.info("✅ Environment setup complete!")
+        logger.info("Environment setup complete!")
         return True
     
     def _install_dependencies(self) -> bool:
         """Install required dependencies"""
-        logger.info("📦 Installing nuScenes dependencies...")
+        logger.info("Installing nuScenes dependencies...")
         
         dependencies = [
             "nuscenes-devkit",
@@ -83,7 +83,7 @@ class NuScenesIntegrationManager:
                 subprocess.check_call([sys.executable, "-m", "pip", "install", dep], 
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except subprocess.CalledProcessError:
-                logger.warning(f"   ⚠️  Failed to install {dep}, continuing...")
+                logger.warning(f"Failed to install {dep}, continuing...")
         
         return True
     
@@ -92,15 +92,15 @@ class NuScenesIntegrationManager:
         try:
             from nuscenes.nuscenes import NuScenes
             nusc = NuScenes(version=self.version, dataroot=str(self.data_root), verbose=False)
-            logger.info(f"✅ nuScenes {self.version} verified ({len(nusc.sample)} samples)")
+            logger.info(f"nuScenes {self.version} verified ({len(nusc.sample)} samples)")
             return True
         except Exception as e:
-            logger.error(f"❌ nuScenes verification failed: {e}")
+            logger.error(f"nuScenes verification failed: {e}")
             return False
     
     def validate_dataset(self) -> Dict[str, Any]:
         """Run comprehensive dataset validation"""
-        logger.info("🔍 Running dataset validation...")
+        logger.info("Running dataset validation...")
         
         try:
             # Import validation module
@@ -117,11 +117,11 @@ class NuScenesIntegrationManager:
             
             overall_score = report.quality_scores['overall']
             if overall_score >= 90:
-                logger.info("✅ Dataset validation PASSED - Excellent quality")
+                logger.info("Dataset validation PASSED - Excellent quality")
             elif overall_score >= 70:
-                logger.info("✅ Dataset validation PASSED - Good quality")
+                logger.info("Dataset validation PASSED - Good quality")
             else:
-                logger.warning("⚠️  Dataset validation passed with issues")
+                logger.warning("Dataset validation passed with issues")
             
             return {
                 'status': 'success',
@@ -130,12 +130,12 @@ class NuScenesIntegrationManager:
             }
             
         except Exception as e:
-            logger.error(f"❌ Dataset validation failed: {e}")
+            logger.error(f"Dataset validation failed: {e}")
             return {'status': 'failed', 'error': str(e)}
     
     def analyze_dataset(self) -> Dict[str, Any]:
         """Run comprehensive dataset analysis"""
-        logger.info("📊 Running dataset analysis...")
+        logger.info("Running dataset analysis...")
         
         try:
             # Import analysis module
@@ -158,12 +158,12 @@ class NuScenesIntegrationManager:
             return {'status': 'success', 'results': results}
             
         except Exception as e:
-            logger.error(f"❌ Dataset analysis failed: {e}")
+            logger.error(f"Dataset analysis failed: {e}")
             return {'status': 'failed', 'error': str(e)}
     
     def setup_training(self, config_type: str = "auto") -> Dict[str, Any]:
         """Setup training configuration"""
-        logger.info("🚀 Setting up training configuration...")
+        logger.info("Setting up training configuration...")
         
         # Detect GPU capabilities
         gpu_memory = self._detect_gpu_memory()
@@ -194,7 +194,7 @@ class NuScenesIntegrationManager:
         with open(config_file, 'w') as f:
             json.dump(config, f, indent=2)
         
-        logger.info(f"✅ Training configuration saved: {config_file}")
+        logger.info(f"Training configuration saved: {config_file}")
         logger.info(f"   GPU Memory: {gpu_memory:.1f}GB")
         logger.info(f"   Configuration: {config_name}")
         logger.info(f"   Batch Size: {config['batch_size']}")
@@ -275,7 +275,7 @@ class NuScenesIntegrationManager:
     
     def start_training(self, config_file: str = None) -> bool:
         """Start training with nuScenes dataset"""
-        logger.info("🚀 Starting nuScenes training...")
+        logger.info("Starting nuScenes training...")
         
         try:
             # Import training module
@@ -294,7 +294,7 @@ class NuScenesIntegrationManager:
             return True
             
         except Exception as e:
-            logger.error(f"❌ Training failed: {e}")
+            logger.error(f"Training failed: {e}")
             return False
     
     def print_status(self):
@@ -305,44 +305,44 @@ class NuScenesIntegrationManager:
         
         # Check data directory
         if self.data_root.exists():
-            print(f"✅ Data directory found: {self.data_root}")
+            print(f"Data directory found: {self.data_root}")
         else:
-            print(f"❌ Data directory not found: {self.data_root}")
+            print(f"Data directory not found: {self.data_root}")
         
         # Check version directory
         version_dir = self.data_root / self.version
         if version_dir.exists():
-            print(f"✅ Version directory found: {self.version}")
+            print(f"Version directory found: {self.version}")
         else:
             available_versions = [d.name for d in self.data_root.iterdir() if d.is_dir() and d.name.startswith('v1.0')]
             if available_versions:
-                print(f"⚠️  Version {self.version} not found, available: {available_versions}")
+                print(f"Version {self.version} not found, available: {available_versions}")
             else:
-                print(f"❌ No version directories found")
+                print(f"No version directories found")
         
         # Check dependencies
         try:
             from nuscenes.nuscenes import NuScenes
-            print("✅ nuScenes devkit available")
+            print("nuScenes devkit available")
         except ImportError:
-            print("❌ nuScenes devkit not available")
+            print("nuScenes devkit not available")
         
         # Check GPU
         try:
             import torch
             if torch.cuda.is_available():
                 gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-                print(f"✅ GPU available: {torch.cuda.get_device_name(0)} ({gpu_memory:.1f}GB)")
+                print(f"GPU available: {torch.cuda.get_device_name(0)} ({gpu_memory:.1f}GB)")
             else:
-                print("⚠️  No GPU available")
+                print("No GPU available")
         except:
-            print("❌ PyTorch not available")
+            print("PyTorch not available")
         
         print("="*80)
     
     def run_complete_workflow(self) -> bool:
         """Run complete integration workflow"""
-        logger.info("🔄 Running complete nuScenes integration workflow...")
+        logger.info("Running complete nuScenes integration workflow...")
         
         # Step 1: Setup environment
         if not self.setup_environment():
@@ -363,7 +363,7 @@ class NuScenesIntegrationManager:
         if training_setup['status'] != 'success':
             return False
         
-        logger.info("✅ Complete integration workflow finished!")
+        logger.info("Complete integration workflow finished!")
         logger.info("\nNext steps:")
         logger.info(f"1. Review training config: {training_setup['config_file']}")
         logger.info("2. Start training with: python setup_nuscenes_integration.py --action train")
