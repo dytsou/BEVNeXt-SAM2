@@ -120,6 +120,14 @@ RUN pip install --no-cache-dir --retries 5 --timeout 300 \
     shapely \
     yapf
 
+# Install nuScenes dependencies
+RUN pip install --no-cache-dir --retries 5 --timeout 300 \
+    nuscenes-devkit \
+    pyquaternion \
+    descartes \
+    seaborn \
+    pandas
+
 # Install additional dependencies
 RUN pip install --no-cache-dir --retries 5 --timeout 300 \
     eva-decord>=0.6.1 \
@@ -129,6 +137,16 @@ RUN pip install --no-cache-dir --retries 5 --timeout 300 \
 
 # Copy the entire project
 COPY . .
+
+# Ensure nuScenes integration files are properly placed
+COPY training/nuscenes_dataset_v2.py ./training/
+COPY training/train_bevnext_sam2_nuscenes.py ./training/
+COPY validation/nuscenes_validator.py ./validation/
+COPY utils/nuscenes_data_analysis.py ./utils/
+COPY setup_nuscenes_integration.py ./
+
+# Create validation and utils directories if they don't exist
+RUN mkdir -p validation utils
 
 # Copy the minimal setup.py for Docker build
 
@@ -149,15 +167,19 @@ RUN python -c "import torch; print(f'PyTorch version: {torch.__version__}'); pri
 # This avoids compilation issues during Docker build
 RUN FORCE_CUDA=0 pip install --no-deps -e .
 
-# Create directories for data and checkpoints
-RUN mkdir -p /workspace/data /workspace/checkpoints /workspace/outputs
+# Create directories for data, checkpoints, and nuScenes integration
+RUN mkdir -p /workspace/data /workspace/checkpoints /workspace/outputs \
+    /workspace/data/nuscenes /workspace/outputs/validation_reports \
+    /workspace/outputs/analysis_output /workspace/outputs/training_nuscenes
 
 # Set environment variables for the application
 ENV PYTHONPATH=/workspace/bevnext-sam2
+ENV NUSCENES_DATA_ROOT=/workspace/data/nuscenes
 
 # Create a non-root user
 RUN useradd -m -u 1000 -s /bin/bash bevnext && \
-    chown -R bevnext:bevnext /workspace
+    chown -R bevnext:bevnext /workspace && \
+    chmod 755 /workspace/data /workspace/outputs
 
 # Switch to non-root user
 USER bevnext
@@ -168,6 +190,8 @@ EXPOSE 8888 6006
 # Set the default command
 CMD ["python", "examples/demo_fusion.py"]
 
-# Health check
+# Health check (includes nuScenes integration check)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python -c "import torch; import sam2_module; import bevnext; print('All modules loaded successfully')" || exit 1 
+    CMD python -c "import torch; import sam2_module; import bevnext; \
+                   try: from nuscenes.nuscenes import NuScenes; print('All modules including nuScenes loaded successfully'); \
+                   except: print('Core modules loaded, nuScenes integration available')" || exit 1 

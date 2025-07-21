@@ -38,6 +38,10 @@ show_usage() {
     echo "  dev                  Start development environment with Jupyter"
     echo "  shell                Start interactive shell in container"
     echo "  train                Start automatic BEVNeXt-SAM2 training (no prompts)"
+    echo "  train-nuscenes       Start nuScenes v1.0 dataset training with validation"
+    echo "  validate-nuscenes    Validate nuScenes dataset integrity and quality"
+    echo "  analyze-nuscenes     Analyze nuScenes dataset statistics and generate reports"
+    echo "  setup-nuscenes       Complete nuScenes integration setup workflow"
     echo "  inference            Start inference environment"
     echo "  tensorboard          Start TensorBoard server"
     echo ""
@@ -56,6 +60,10 @@ show_usage() {
     echo "  $0 dev --port 8889         # Start Jupyter on port 8889"
     echo "  $0 shell                   # Interactive shell"
     echo "  $0 train --gpu 1           # Automatic training on GPU 1"
+    echo "  $0 train-nuscenes          # Train with real nuScenes v1.0 dataset"
+    echo "  $0 validate-nuscenes       # Validate nuScenes dataset integrity"
+    echo "  $0 analyze-nuscenes        # Generate nuScenes dataset analysis"
+    echo "  $0 setup-nuscenes          # Complete nuScenes setup workflow"
 }
 
 # Function to check if container exists
@@ -423,6 +431,173 @@ case $MODE in
                 echo '' && \
                 mkdir -p /workspace/outputs /workspace/logs && \
                 python training/train_bevnext_sam2.py --mixed-precision
+            "
+        ;;
+        
+    train-nuscenes)
+        echo -e "${GREEN}Starting nuScenes v1.0 dataset training...${NC}"
+        echo -e "${BLUE}Training with real autonomous driving data from nuScenes${NC}"
+        echo -e "${YELLOW}nuScenes training features:${NC}"
+        echo -e "  • Real autonomous driving data (cameras, LiDAR, radar)"
+        echo -e "  • 23 object categories from nuScenes taxonomy"
+        echo -e "  • Token-based data associations"
+        echo -e "  • Multi-modal sensor fusion"
+        echo -e "  • Automatic dataset validation before training"
+        echo -e "  • Memory optimizations for RTX 2080 Ti and similar GPUs"
+        echo ""
+        CONTAINER_FULL_NAME="${CONTAINER_NAME}-nuscenes-train"
+        remove_container "$CONTAINER_FULL_NAME"
+        
+        echo -e "${GREEN}🚗 Launching nuScenes training pipeline...${NC}"
+        docker run $DOCKER_OPTS \
+            --name "$CONTAINER_FULL_NAME" \
+            --shm-size=8g \
+            -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2 \
+            -v $ABS_OUTPUTS_PATH:/workspace/outputs \
+            -v $ABS_LOGS_PATH:/workspace/logs \
+            -v $ABS_DATA_PATH:/workspace/data \
+            -w /workspace/bevnext-sam2 \
+            $IMAGE_NAME \
+            bash -c "
+                echo '🚗 Starting nuScenes v1.0 Training Pipeline...' && \
+                echo 'GPU Status:' && \
+                python -c 'import torch; print(f\"  • CUDA available: {torch.cuda.is_available()}\"); print(f\"  • GPU count: {torch.cuda.device_count() if torch.cuda.is_available() else 0}\")' && \
+                echo '  • Training: Real nuScenes v1.0 dataset' && \
+                echo '  • Data directory: /workspace/data/nuscenes/' && \
+                echo '  • Output directory: /workspace/outputs/' && \
+                echo '' && \
+                echo '🔧 Setting up nuScenes environment...' && \
+                pip install --user nuscenes-devkit pyquaternion shapely --quiet && \
+                echo '' && \
+                echo '🔍 Running dataset validation...' && \
+                python setup_nuscenes_integration.py --data-root /workspace/data/nuscenes --action validate && \
+                echo '' && \
+                echo '🚀 Starting enhanced training...' && \
+                mkdir -p /workspace/outputs /workspace/logs && \
+                python training/train_bevnext_sam2_nuscenes.py --data-root /workspace/data/nuscenes --mixed-precision && \
+                echo '' && \
+                echo '✅ nuScenes training completed!' && \
+                echo '📊 Check outputs/ for training results and model checkpoints'
+            "
+        ;;
+        
+    validate-nuscenes)
+        echo -e "${GREEN}Validating nuScenes dataset integrity and quality...${NC}"
+        echo -e "${BLUE}Comprehensive validation of nuScenes v1.0 dataset${NC}"
+        echo -e "${YELLOW}Validation checks:${NC}"
+        echo -e "  • Token linkage integrity (scene→sample→annotation)"
+        echo -e "  • Sensor data file existence and format validation"
+        echo -e "  • 3D annotation geometry verification"
+        echo -e "  • Quality scoring and health assessment"
+        echo ""
+        CONTAINER_FULL_NAME="${CONTAINER_NAME}-nuscenes-validate"
+        remove_container "$CONTAINER_FULL_NAME"
+        
+        echo -e "${GREEN}🔍 Launching nuScenes validation...${NC}"
+        docker run $DOCKER_OPTS \
+            --name "$CONTAINER_FULL_NAME" \
+            -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2 \
+            -v $ABS_DATA_PATH:/workspace/data \
+            -v $ABS_OUTPUTS_PATH:/workspace/outputs \
+            -w /workspace/bevnext-sam2 \
+            $IMAGE_NAME \
+            bash -c "
+                echo '🔍 Starting nuScenes Dataset Validation...' && \
+                echo 'Setting up validation environment...' && \
+                pip install --user nuscenes-devkit pyquaternion pandas --quiet && \
+                echo 'Dataset location: /workspace/data/nuscenes/' && \
+                echo 'Validation reports: /workspace/outputs/validation_reports/' && \
+                echo '' && \
+                echo '🧪 Running comprehensive validation tests...' && \
+                mkdir -p /workspace/outputs/validation_reports && \
+                python validation/nuscenes_validator.py --data-root /workspace/data/nuscenes --output-dir /workspace/outputs/validation_reports && \
+                echo '' && \
+                echo '✅ Validation completed!' && \
+                echo '📊 Check outputs/validation_reports/ for detailed results'
+            "
+        ;;
+        
+    analyze-nuscenes)
+        echo -e "${GREEN}Analyzing nuScenes dataset statistics and characteristics...${NC}"
+        echo -e "${BLUE}Comprehensive analysis with visualizations and reports${NC}"
+        echo -e "${YELLOW}Analysis features:${NC}"
+        echo -e "  • Dataset statistics (scenes, samples, categories)"
+        echo -e "  • Sensor coverage analysis"
+        echo -e "  • Object category distribution"
+        echo -e "  • Temporal and geographical analysis"
+        echo -e "  • Interactive visualizations"
+        echo ""
+        CONTAINER_FULL_NAME="${CONTAINER_NAME}-nuscenes-analyze"
+        remove_container "$CONTAINER_FULL_NAME"
+        
+        echo -e "${GREEN}📊 Launching nuScenes analysis...${NC}"
+        docker run $DOCKER_OPTS \
+            --name "$CONTAINER_FULL_NAME" \
+            -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2 \
+            -v $ABS_DATA_PATH:/workspace/data \
+            -v $ABS_OUTPUTS_PATH:/workspace/outputs \
+            -w /workspace/bevnext-sam2 \
+            $IMAGE_NAME \
+            bash -c "
+                echo '📊 Starting nuScenes Dataset Analysis...' && \
+                echo 'Setting up analysis environment...' && \
+                pip install --user nuscenes-devkit seaborn pandas matplotlib --quiet && \
+                echo 'Dataset location: /workspace/data/nuscenes/' && \
+                echo 'Analysis outputs: /workspace/outputs/analysis_output/' && \
+                echo '' && \
+                echo '🔬 Running comprehensive dataset analysis...' && \
+                mkdir -p /workspace/outputs/analysis_output && \
+                python utils/nuscenes_data_analysis.py --data-root /workspace/data/nuscenes --output-dir /workspace/outputs/analysis_output --visualize --save-results && \
+                echo '' && \
+                echo '✅ Analysis completed!' && \
+                echo '📁 Results saved to outputs/analysis_output/' && \
+                echo '📊 Visualizations available as PNG files' && \
+                echo '📋 JSON report with detailed statistics generated'
+            "
+        ;;
+        
+    setup-nuscenes)
+        echo -e "${GREEN}Running complete nuScenes integration setup workflow...${NC}"
+        echo -e "${BLUE}Automated setup, validation, analysis, and training preparation${NC}"
+        echo -e "${YELLOW}Setup workflow includes:${NC}"
+        echo -e "  • Environment setup and dependency installation"
+        echo -e "  • Dataset validation and integrity checks"
+        echo -e "  • Comprehensive dataset analysis"
+        echo -e "  • Training configuration optimization"
+        echo -e "  • Ready-to-use training setup"
+        echo ""
+        CONTAINER_FULL_NAME="${CONTAINER_NAME}-nuscenes-setup"
+        remove_container "$CONTAINER_FULL_NAME"
+        
+        echo -e "${GREEN}🔧 Launching complete nuScenes setup...${NC}"
+        docker run $DOCKER_OPTS \
+            --name "$CONTAINER_FULL_NAME" \
+            -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2 \
+            -v $ABS_DATA_PATH:/workspace/data \
+            -v $ABS_OUTPUTS_PATH:/workspace/outputs \
+            -w /workspace/bevnext-sam2 \
+            $IMAGE_NAME \
+            bash -c "
+                echo '🔧 Starting Complete nuScenes Integration Setup...' && \
+                echo 'System Status:' && \
+                python -c 'import torch; print(f\"  • CUDA available: {torch.cuda.is_available()}\"); print(f\"  • GPU count: {torch.cuda.device_count() if torch.cuda.is_available() else 0}\")' && \
+                echo '  • Setup mode: Complete workflow automation' && \
+                echo '  • Data directory: /workspace/data/nuscenes/' && \
+                echo '  • Output directory: /workspace/outputs/' && \
+                echo '' && \
+                echo '📦 Installing nuScenes dependencies...' && \
+                pip install --user nuscenes-devkit pyquaternion shapely seaborn pandas matplotlib tqdm --quiet && \
+                echo '' && \
+                echo '🚀 Running complete integration workflow...' && \
+                mkdir -p /workspace/outputs && \
+                python setup_nuscenes_integration.py --data-root /workspace/data/nuscenes --action complete && \
+                echo '' && \
+                echo '✅ Complete setup workflow finished!' && \
+                echo '' && \
+                echo '🎯 Next Steps:' && \
+                echo '   1. Review setup results in outputs/' && \
+                echo '   2. Start training: ./scripts/run.sh train-nuscenes' && \
+                echo '   3. Monitor progress with TensorBoard'
             "
         ;;
         
