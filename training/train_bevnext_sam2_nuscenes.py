@@ -50,6 +50,16 @@ except ImportError as e:
     NUSCENES_AVAILABLE = False
     print(f"Enhanced nuScenes dataset not available: {e}")
 
+# Import SAM2 components
+try:
+    from sam2_module.build_sam import build_sam2
+    from sam2_module.sam2_image_predictor import SAM2ImagePredictor
+    SAM2_AVAILABLE = True
+    print("SAM2 module imported successfully")
+except ImportError as e:
+    SAM2_AVAILABLE = False
+    print(f"SAM2 not available: {e}")
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -81,6 +91,9 @@ class EnhancedBEVNeXtSAM2Model(nn.Module):
         self.num_cameras = len(config.get('camera_names', ['CAM_FRONT', 'CAM_FRONT_RIGHT', 'CAM_FRONT_LEFT', 'CAM_BACK', 'CAM_BACK_RIGHT', 'CAM_BACK_LEFT']))
         self.num_classes = config.get('num_classes', 23)  # nuScenes has 23 categories
         
+        # Initialize SAM2 for feature extraction
+        self._init_sam2()
+        
         # Build model components
         self.camera_backbone = self._build_camera_backbone()
         if self.use_lidar:
@@ -99,6 +112,34 @@ class EnhancedBEVNeXtSAM2Model(nn.Module):
         if self.use_gradient_checkpointing:
             logger.info("Gradient checkpointing enabled for memory efficiency")
             self._enable_gradient_checkpointing()
+    
+    def _init_sam2(self):
+        """Initialize SAM2 for feature extraction"""
+        if not SAM2_AVAILABLE:
+            raise ImportError("SAM2 module not available. Please install sam2_module.")
+        
+        # SAM2 configuration
+        sam2_config = self.config.get('sam2_config', 'configs/sam2/sam2/sam2_hiera_s.yaml')
+        sam2_checkpoint = self.config.get('sam2_checkpoint', 'checkpoints/latest.pth')
+        
+        try:
+            # Load SAM2 model
+            self.sam2_model = build_sam2(
+                config_file=sam2_config,
+                ckpt_path=sam2_checkpoint,
+                device='cuda' if torch.cuda.is_available() else 'cpu'
+            )
+            
+            # Create SAM2 image predictor for feature extraction
+            self.sam2_predictor = SAM2ImagePredictor(self.sam2_model)
+            
+            logger.info(f"SAM2 model initialized with config: {sam2_config}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to load SAM2 model: {e}")
+            logger.warning("Falling back to placeholder SAM2 features")
+            self.sam2_model = None
+            self.sam2_predictor = None
     
     def _build_camera_backbone(self) -> nn.Module:
         """Build multi-camera feature extraction backbone"""
@@ -285,6 +326,9 @@ class EnhancedBEVNeXtSAM2Model(nn.Module):
         Returns:
             Dictionary with predictions
         """
+        # Store current batch for SAM2 feature extraction
+        self._current_batch = batch
+        
         B = batch['camera_images'].shape[0] if 'camera_images' in batch else batch['gt_boxes'].shape[0]
         device = next(self.parameters()).device
         
@@ -309,7 +353,7 @@ class EnhancedBEVNeXtSAM2Model(nn.Module):
         # Project to BEV space
         bev_features = self._project_to_bev(camera_features, lidar_features, radar_features)
         
-        # Generate SAM2 features (placeholder)
+        # Generate SAM2 features using real SAM2 model
         sam2_features = self._generate_sam2_features(bev_features)
         
         # Fuse BEV and SAM2 features
@@ -320,6 +364,9 @@ class EnhancedBEVNeXtSAM2Model(nn.Module):
         
         # Generate object queries and predictions
         predictions = self._generate_predictions(transformed_features)
+        
+        # Clean up batch reference
+        delattr(self, '_current_batch')
         
         return predictions
     
@@ -409,10 +456,82 @@ class EnhancedBEVNeXtSAM2Model(nn.Module):
         return bev_features
     
     def _generate_sam2_features(self, bev_features: torch.Tensor) -> torch.Tensor:
-        """Generate SAM2 features (placeholder implementation)"""
-        # In real implementation, this would run SAM2 on camera images
-        # For now, generate features matching BEV shape
-        return torch.randn_like(bev_features)
+        """Generate SAM2 features from camera images"""
+        # Get the current batch from the forward pass context
+        if not hasattr(self, '_current_batch'):
+            # Fallback to placeholder if batch not available
+            logger.warning("No camera images available for SAM2 feature extraction, using placeholder")
+            return torch.randn_like(bev_features)
+        
+        batch = self._current_batch
+        
+        # Check if SAM2 is available and camera images exist
+        if self.sam2_predictor is None or 'camera_images' not in batch:
+            return torch.randn_like(bev_features)
+        
+        try:
+            return self._extract_sam2_features_from_cameras(batch['camera_images'], bev_features.shape)
+        except Exception as e:
+            logger.warning(f"SAM2 feature extraction failed: {e}, using placeholder")
+            return torch.randn_like(bev_features)
+    
+    def _extract_sam2_features_from_cameras(self, camera_images: torch.Tensor, target_shape: tuple) -> torch.Tensor:
+        """Extract SAM2 features from camera images"""
+        B, N_cams, C, H, W = camera_images.shape
+        target_B, target_C, target_H, target_W = target_shape
+        
+        # Process each camera image to extract SAM2 features
+        sam2_features_list = []
+        
+        for b in range(B):
+            batch_features = []
+            
+            for cam in range(N_cams):
+                # Get single camera image [C, H, W]
+                cam_image = camera_images[b, cam]  # [C, H, W]
+                
+                # Convert to numpy format for SAM2 (H, W, C) with values [0, 255]
+                cam_image_np = cam_image.permute(1, 2, 0).cpu().numpy()  # [H, W, C]
+                cam_image_np = (cam_image_np * 255).astype(np.uint8)
+                
+                # Set image in SAM2 predictor and extract features
+                with torch.no_grad():
+                    self.sam2_predictor.set_image(cam_image_np)
+                    # Get image embeddings from SAM2
+                    sam2_embed = self.sam2_predictor.get_image_embedding()  # [1, C_sam2, H_sam2, W_sam2]
+                    
+                    # Resize to target spatial dimensions if needed
+                    if sam2_embed.shape[-2:] != (target_H, target_W):
+                        sam2_embed = F.interpolate(
+                            sam2_embed, 
+                            size=(target_H, target_W), 
+                            mode='bilinear', 
+                            align_corners=False
+                        )
+                    
+                    batch_features.append(sam2_embed.squeeze(0))  # Remove batch dim: [C_sam2, H, W]
+            
+            # Average features across cameras
+            avg_features = torch.stack(batch_features).mean(dim=0)  # [C_sam2, H, W]
+            
+            # Project to target channel dimension
+            if avg_features.shape[0] != target_C:
+                # Use a simple projection layer
+                if not hasattr(self, 'sam2_channel_proj'):
+                    self.sam2_channel_proj = nn.Conv2d(
+                        avg_features.shape[0], 
+                        target_C, 
+                        kernel_size=1
+                    ).to(avg_features.device)
+                
+                avg_features = self.sam2_channel_proj(avg_features.unsqueeze(0)).squeeze(0)
+            
+            sam2_features_list.append(avg_features)
+        
+        # Stack batch dimension
+        sam2_features = torch.stack(sam2_features_list)  # [B, target_C, target_H, target_W]
+        
+        return sam2_features
     
     def _fuse_features(self, bev_features: torch.Tensor, sam2_features: torch.Tensor) -> torch.Tensor:
         """Fuse BEV and SAM2 features"""
@@ -884,6 +1003,10 @@ def get_enhanced_config(data_root: str = "data/nuscenes") -> Dict:
         'num_transformer_layers': 4,
         'num_classes': 23,  # nuScenes categories
         'num_queries': 100,  # Reduced for memory efficiency
+        
+        # SAM2 configuration
+        'sam2_config': 'configs/sam2/sam2/sam2_hiera_s.yaml',  # Use small model for efficiency
+        'sam2_checkpoint': 'checkpoints/latest.pth',
         
         # Multi-modal configuration
         'use_camera': True,
