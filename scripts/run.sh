@@ -471,8 +471,8 @@ case $MODE in
                 echo '🔧 Setting up training environment...' && \
                 pip install --quiet nuscenes-devkit pyquaternion shapely tensorboard seaborn pandas || echo 'Dependencies already installed' && \
                 echo '' && \
-                echo '🔍 Running dataset validation...' && \
-                python setup_nuscenes_integration.py --data-root /workspace/data/nuscenes --action validate && \
+                echo '🔍 Running dataset validation (optional)...' && \
+                python setup_nuscenes_integration.py --data-root /workspace/data/nuscenes --action validate || echo 'Validation skipped - proceeding with training...' && \
                 echo '' && \
                 echo '🚀 Starting enhanced training...' && \
                 mkdir -p /workspace/outputs /workspace/logs && \

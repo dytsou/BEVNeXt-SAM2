@@ -23,11 +23,24 @@ from nuscenes.utils.splits import create_splits_scenes
 import logging
 from dataclasses import dataclass, asdict
 from collections import defaultdict, Counter
-import matplotlib.pyplot as plt
-import seaborn as sns
 from tqdm import tqdm
 import warnings
 warnings.filterwarnings('ignore')
+
+# Optional visualization imports
+try:
+    import matplotlib.pyplot as plt
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
+    plt = None
+    
+try:
+    import seaborn as sns
+    SEABORN_AVAILABLE = True
+except ImportError:
+    SEABORN_AVAILABLE = False
+    sns = None
 
 # Configure logging
 logging.basicConfig(
