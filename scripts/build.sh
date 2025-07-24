@@ -72,11 +72,19 @@ build_image() {
     echo -e "${BLUE}This may take 10-20 minutes depending on your internet speed${NC}"
     
     # Build with BuildKit for better caching and performance
+    # Change to parent directory to include nuScenes dataset in build context
+    cd ../..
+    echo -e "${BLUE}Build context: $(pwd)${NC}"
+
+    # Build with BuildKit for better caching and performance
     DOCKER_BUILDKIT=1 docker build \
         --progress=plain \
         --tag $IMAGE_NAME \
-        --file Dockerfile \
-        $BUILD_CONTEXT
+        --file dytsou-project/BEVNeXt-SAM2/Dockerfile \
+        .
+
+    # Return to original directory
+    cd dytsou-project/BEVNeXt-SAM2
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✓ Docker image built successfully!${NC}"

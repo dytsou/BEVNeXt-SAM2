@@ -137,7 +137,7 @@ RUN pip install --no-cache-dir --retries 5 --timeout 300 \
     av>=13.0.0
 
 # Copy the entire project
-COPY . .
+COPY dytsou-project/BEVNeXt-SAM2 .
 
 # Ensure nuScenes integration files are properly placed
 COPY training/nuscenes_dataset_v2.py ./training/
@@ -175,7 +175,7 @@ RUN mkdir -p /workspace/data /workspace/checkpoints /workspace/outputs \
 
 # Copy nuScenes dataset directly into the image
 # This assumes the nuScenes dataset is located at ../../nuscenes relative to the Dockerfile
-COPY ../../nuscenes /workspace/data/nuscenes
+COPY nuscenes /workspace/data/nuscenes
 
 # Set environment variables for the application
 ENV PYTHONPATH=/workspace/bevnext-sam2
