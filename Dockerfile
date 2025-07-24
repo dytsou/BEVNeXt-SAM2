@@ -175,7 +175,7 @@ RUN mkdir -p /workspace/data /workspace/checkpoints /workspace/outputs \
 
 # Copy nuScenes dataset directly into the image
 # This assumes the nuScenes dataset is located at ../../nuscenes relative to the Dockerfile
-COPY /mnt/HHD1/dytsou/nuscenes /workspace/data/nuscenes
+COPY ../../nuscenes /workspace/data/nuscenes
 
 # Set environment variables for the application
 ENV PYTHONPATH=/workspace/bevnext-sam2
