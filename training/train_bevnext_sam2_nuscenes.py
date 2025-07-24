@@ -24,13 +24,25 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
+try:
+    from torch.utils.tensorboard import SummaryWriter
+    TENSORBOARD_AVAILABLE = True
+except ImportError:
+    TENSORBOARD_AVAILABLE = False
+    SummaryWriter = None
+    print("Warning: TensorBoard not available, logging will be limited")
 import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 import numpy as np
 from tqdm import tqdm
-import matplotlib.pyplot as plt
+try:
+    import matplotlib.pyplot as plt
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
+    plt = None
+    print("Warning: Matplotlib not available, plotting will be disabled")
 from collections import defaultdict, OrderedDict
 
 # Add project root to path
@@ -759,7 +771,11 @@ class NuScenesTrainer:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # Setup tensorboard
-        self.writer = SummaryWriter(self.output_dir / 'tensorboard')
+        if TENSORBOARD_AVAILABLE:
+            self.writer = SummaryWriter(self.output_dir / 'tensorboard')
+        else:
+            self.writer = None
+            logger.warning("TensorBoard not available, logging will be limited.")
         
         # Save configuration
         config_path = self.output_dir / 'config.json'
@@ -829,7 +845,8 @@ class NuScenesTrainer:
             # Log to tensorboard
             global_step = self.epoch * len(self.train_loader) + batch_idx
             for key, value in losses.items():
-                self.writer.add_scalar(f'train_loss/{key}', value.item(), global_step)
+                if self.writer:
+                    self.writer.add_scalar(f'train_loss/{key}', value.item(), global_step)
             
             # Clear cache periodically
             if batch_idx % 10 == 0 and torch.cuda.is_available():
@@ -974,10 +991,11 @@ class NuScenesTrainer:
                 self.training_stats[f'val_{key}'].append(value)
             
             # Log to tensorboard
-            for key, value in train_metrics.items():
-                self.writer.add_scalar(f'epoch_train/{key}', value, epoch)
-            for key, value in val_metrics.items():
-                self.writer.add_scalar(f'epoch_val/{key}', value, epoch)
+            if self.writer:
+                for key, value in train_metrics.items():
+                    self.writer.add_scalar(f'epoch_train/{key}', value, epoch)
+                for key, value in val_metrics.items():
+                    self.writer.add_scalar(f'epoch_val/{key}', value, epoch)
             
             # Save checkpoint
             is_best = val_metrics['total'] < self.best_val_loss
@@ -987,7 +1005,8 @@ class NuScenesTrainer:
             self.save_checkpoint(is_best)
         
         logger.info("Training completed!")
-        self.writer.close()
+        if self.writer:
+            self.writer.close()
 
 
 def get_enhanced_config(data_root: str = "data/nuscenes") -> Dict:

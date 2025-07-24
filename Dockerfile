@@ -63,6 +63,7 @@ RUN pip install --no-cache-dir --retries 5 --timeout 300 -c constraints.txt \
     tqdm>=4.66.1 \
     scikit-image \
     tensorboard \
+    seaborn \
     matplotlib>=3.9.1 \
     jupyter>=1.0.0 \
     opencv-python>=4.7.0 \

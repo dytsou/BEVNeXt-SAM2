@@ -421,6 +421,8 @@ case $MODE in
                 echo 'GPU Status:' && \
                 python -c 'import torch; print(\"CUDA available:\", torch.cuda.is_available()); print(\"GPU count:\", torch.cuda.device_count())' && \
                 echo '' && \
+                echo '🔧 Installing required dependencies...' && \
+                pip install --quiet tensorboard seaborn matplotlib || echo 'Dependencies already available' && \
                 echo 'Training Configuration (Auto-detected):' && \
                 echo '  • Model: BEVNeXt + SAM2 Fusion' && \
                 echo '  • Data: Synthetic generation (no external datasets)' && \
@@ -466,8 +468,8 @@ case $MODE in
                 echo '  • Data directory: /workspace/data/nuscenes/' && \
                 echo '  • Output directory: /workspace/outputs/' && \
                 echo '' && \
-                echo '🔧 Setting up nuScenes environment...' && \
-                pip install --user nuscenes-devkit pyquaternion shapely --quiet && \
+                echo '🔧 Setting up training environment...' && \
+                pip install --quiet nuscenes-devkit pyquaternion shapely tensorboard seaborn pandas || echo 'Dependencies already installed' && \
                 echo '' && \
                 echo '🔍 Running dataset validation...' && \
                 python setup_nuscenes_integration.py --data-root /workspace/data/nuscenes --action validate && \
