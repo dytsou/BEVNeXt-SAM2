@@ -479,9 +479,11 @@ class NuScenesMultiModalDataset(Dataset):
             camera_intrinsics.append(intrinsic)
             
             # Camera extrinsics (sensor to ego transformation)
+            from pyquaternion import Quaternion
+            rotation = Quaternion(calibrated_sensor['rotation'])
             extrinsic = torch.tensor(transform_matrix(
                 calibrated_sensor['translation'],
-                calibrated_sensor['rotation']
+                rotation
             ), dtype=torch.float32)
             camera_extrinsics.append(extrinsic)
         
