@@ -137,7 +137,7 @@ RUN pip install --no-cache-dir --retries 5 --timeout 300 \
     av>=13.0.0
 
 # Copy the entire project
-COPY dytsou-project/BEVNeXt-SAM2 .
+COPY . .
 
 # Ensure nuScenes integration files are properly placed
 COPY training/nuscenes_dataset_v2.py ./training/
