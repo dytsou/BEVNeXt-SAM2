@@ -634,7 +634,15 @@ class EnhancedBEVNeXtSAM2Model(nn.Module):
         pred_cls_flat = pred_cls.reshape(-1, pred_cls.size(-1))
         target_cls_flat = target_cls.reshape(-1)
         
-        losses['classification'] = self.focal_loss(pred_cls_flat, target_cls_flat)
+        # Handle empty annotations - only compute loss for valid targets
+        if target_valid.sum() > 0:
+            valid_mask = target_valid.flatten()
+            pred_cls_valid = pred_cls_flat[valid_mask]
+            target_cls_valid = target_cls_flat[valid_mask]
+            losses['classification'] = self.focal_loss(pred_cls_valid, target_cls_valid)
+        else:
+            # No valid targets in this batch, use a small dummy loss
+            losses['classification'] = torch.tensor(0.0, device=pred_cls.device)
         
         # Regression loss (only for valid targets)
         if target_valid.sum() > 0:
