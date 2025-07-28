@@ -1079,7 +1079,7 @@ def get_enhanced_config(data_root: str = "data/nuscenes") -> Dict:
     return {
         # Data configuration
         'data_root': data_root,
-        'nuscenes_version': 'v1.0-trainval',
+        'nuscenes_version': 'v1.0-trainval',  # Use full dataset instead of mini
         
         # Model configuration
         'd_model': 128,  # Reduced for memory efficiency

@@ -332,10 +332,10 @@ case $MODE in
         DOCKER_CMD="$DOCKER_CMD $IMAGE_NAME"
         
         if [[ "$DRY_RUN" == true ]]; then
-            echo "$DOCKER_CMD bash -c \"python validation/nuscenes_validator.py --data-root /workspace/data/nuscenes --output-dir /workspace/outputs/validation_reports\""
+            echo "$DOCKER_CMD bash -c \"python validation/nuscenes_validator.py --data-root /workspace/data/nuscenes --version v1.0-trainval --output-dir /workspace/outputs/validation_reports\""
         else
             echo -e "${GREEN}🔍 Starting nuScenes validation...${NC}"
-            eval "$DOCKER_CMD bash -c \"python validation/nuscenes_validator.py --data-root /workspace/data/nuscenes --output-dir /workspace/outputs/validation_reports\""
+            eval "$DOCKER_CMD bash -c \"python validation/nuscenes_validator.py --data-root /workspace/data/nuscenes --version v1.0-trainval --output-dir /workspace/outputs/validation_reports\""
         fi
         ;;
         

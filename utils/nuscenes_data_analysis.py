@@ -715,7 +715,7 @@ def main():
     """Main analysis function"""
     parser = argparse.ArgumentParser(description='nuScenes Dataset Analysis')
     parser.add_argument('--data-root', default='data/nuscenes', help='Path to nuScenes dataset')
-    parser.add_argument('--version', default='v1.0-mini', help='Dataset version')
+    parser.add_argument('--version', default='v1.0-trainval', help='Dataset version')
     parser.add_argument('--output-dir', default='analysis_output', help='Output directory')
     parser.add_argument('--visualize', action='store_true', help='Generate visualizations')
     parser.add_argument('--save-results', action='store_true', help='Save results to JSON')

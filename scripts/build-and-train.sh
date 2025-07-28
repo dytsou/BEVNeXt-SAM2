@@ -212,7 +212,7 @@ validate_dataset() {
     VALIDATE_CMD="$VALIDATE_CMD -e NUSCENES_DATA_ROOT=/workspace/data/nuscenes"
     VALIDATE_CMD="$VALIDATE_CMD -e PYTHONPATH=/workspace/bevnext-sam2"
     VALIDATE_CMD="$VALIDATE_CMD $IMAGE_NAME"
-    VALIDATE_CMD="$VALIDATE_CMD python validation/nuscenes_validator.py --data-root /workspace/data/nuscenes --output-dir /workspace/outputs/validation_reports"
+    VALIDATE_CMD="$VALIDATE_CMD python validation/nuscenes_validator.py --data-root /workspace/data/nuscenes --version v1.0-trainval --output-dir /workspace/outputs/validation_reports"
     
     if [[ "$DRY_RUN" == true ]]; then
         echo "$VALIDATE_CMD"

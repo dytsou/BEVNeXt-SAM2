@@ -710,7 +710,7 @@ if __name__ == "__main__":
     # Example usage and testing
     config = NuScenesConfig(
         data_root="data/nuscenes",
-        version="v1.0-mini",
+        version="v1.0-trainval",
         image_size=(224, 224),
         bev_size=(48, 48),
         num_queries=100

@@ -821,7 +821,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description='nuScenes Dataset Validation')
     parser.add_argument('--data-root', default='data/nuscenes', help='Path to nuScenes dataset')
-    parser.add_argument('--version', default='v1.0-mini', help='Dataset version')
+    parser.add_argument('--version', default='v1.0-trainval', help='Dataset version')
     parser.add_argument('--output-dir', default='validation_reports', help='Output directory for reports')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
     

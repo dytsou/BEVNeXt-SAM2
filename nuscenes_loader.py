@@ -17,7 +17,7 @@ from typing import List, Dict, Tuple, Any
 class NuScenesLoader:
     """nuScenes dataset loader for evaluation"""
     
-    def __init__(self, data_root: str = "data", version: str = "v1.0-mini"):
+    def __init__(self, data_root: str = "data", version: str = "v1.0-trainval"):
         """
         Initialize nuScenes loader
         
