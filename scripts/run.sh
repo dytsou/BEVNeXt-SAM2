@@ -23,7 +23,6 @@ NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 ABS_PROJECT_PATH="$(realpath "$PROJECT_ROOT")"
-ABS_DATA_PATH="$(realpath "${DATA_PATH:-$DEFAULT_DATA_PATH}" 2>/dev/null || echo "$DEFAULT_DATA_PATH")"
 ABS_OUTPUTS_PATH="$(realpath "$PROJECT_ROOT/outputs" 2>/dev/null || echo "$PROJECT_ROOT/outputs")"
 ABS_LOGS_PATH="$(realpath "$PROJECT_ROOT/logs" 2>/dev/null || echo "$PROJECT_ROOT/logs")"
 
@@ -181,6 +180,16 @@ if [[ -z "$DATA_PATH" ]]; then
     DATA_PATH="$DEFAULT_DATA_PATH"
 fi
 
+# Convert data path to absolute path for Docker volume mounting
+if [[ -d "$DATA_PATH" ]]; then
+    ABS_DATA_PATH="$(realpath "$DATA_PATH")"
+    echo -e "${GREEN}Using dataset: $ABS_DATA_PATH${NC}"
+else
+    ABS_DATA_PATH="$DATA_PATH"
+    echo -e "${YELLOW}Dataset path not found locally: $DATA_PATH${NC}"
+    echo -e "${YELLOW}Will attempt to use as-is (may be a volume or remote path)${NC}"
+fi
+
 # Create necessary directories
 mkdir -p "$ABS_OUTPUTS_PATH" "$ABS_LOGS_PATH"
 
@@ -195,7 +204,7 @@ build_docker_cmd() {
     
     # Add data volume mount
     if [[ "$MODE" == *"train"* ]] || [[ "$MODE" == "dev" ]] || [[ "$MODE" == "demo" ]] || [[ "$MODE" == "validate" ]]; then
-        cmd="$cmd -v $DATA_PATH:/workspace/data/nuscenes:ro"
+        cmd="$cmd -v $ABS_DATA_PATH:/workspace/data/nuscenes:ro"
     fi
     
     # Add extra ports
@@ -410,4 +419,4 @@ case $MODE in
         print_help
         exit 1
         ;;
-esac 
+esac

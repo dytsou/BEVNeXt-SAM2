@@ -131,9 +131,24 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Set data path
+if [[ -z "$DATA_PATH" ]]; then
+    DATA_PATH="$DEFAULT_DATA_PATH"
+fi
+
+# Convert data path to absolute path for Docker volume mounting
+if [[ -d "$DATA_PATH" ]]; then
+    ABS_DATA_PATH="$(realpath "$DATA_PATH")"
+    log_step "Using dataset: $ABS_DATA_PATH"
+else
+    ABS_DATA_PATH="$DATA_PATH"
+    log_warning "Dataset path not found locally: $DATA_PATH"
+    log_warning "Will attempt to use as-is (may be a volume or remote path)"
+fi
+
 # Validate inputs
-if [[ ! -d "$DATA_PATH" ]]; then
-    echo -e "${RED}Error: Dataset path does not exist: $DATA_PATH${NC}"
+if [[ ! -d "$ABS_DATA_PATH" ]]; then
+    echo -e "${RED}Error: Dataset path does not exist: $ABS_DATA_PATH${NC}"
     echo -e "${YELLOW}Please ensure the nuScenes dataset is available at this location${NC}"
     exit 1
 fi
@@ -206,7 +221,7 @@ validate_dataset() {
         VALIDATE_CMD="$VALIDATE_CMD --gpus all"
     fi
     VALIDATE_CMD="$VALIDATE_CMD -v $PROJECT_ROOT:/workspace/bevnext-sam2"
-    VALIDATE_CMD="$VALIDATE_CMD -v $DATA_PATH:/workspace/data/nuscenes:ro"
+    VALIDATE_CMD="$VALIDATE_CMD -v $ABS_DATA_PATH:/workspace/data/nuscenes:ro"
     VALIDATE_CMD="$VALIDATE_CMD -v $OUTPUT_DIR:/workspace/outputs"
     VALIDATE_CMD="$VALIDATE_CMD -w /workspace/bevnext-sam2"
     VALIDATE_CMD="$VALIDATE_CMD -e NUSCENES_DATA_ROOT=/workspace/data/nuscenes"
@@ -249,7 +264,7 @@ train_model() {
         TRAIN_CMD="$TRAIN_CMD --gpus all"
     fi
     TRAIN_CMD="$TRAIN_CMD -v $PROJECT_ROOT:/workspace/bevnext-sam2"
-    TRAIN_CMD="$TRAIN_CMD -v $DATA_PATH:/workspace/data/nuscenes:ro"
+    TRAIN_CMD="$TRAIN_CMD -v $ABS_DATA_PATH:/workspace/data/nuscenes:ro"
     TRAIN_CMD="$TRAIN_CMD -v $OUTPUT_DIR:/workspace/outputs"
     TRAIN_CMD="$TRAIN_CMD -w /workspace/bevnext-sam2"
     TRAIN_CMD="$TRAIN_CMD -e NUSCENES_DATA_ROOT=/workspace/data/nuscenes"
@@ -309,7 +324,7 @@ evaluate_model() {
         EVAL_CMD="$EVAL_CMD --gpus all"
     fi
     EVAL_CMD="$EVAL_CMD -v $PROJECT_ROOT:/workspace/bevnext-sam2"
-    EVAL_CMD="$EVAL_CMD -v $DATA_PATH:/workspace/data/nuscenes:ro"
+    EVAL_CMD="$EVAL_CMD -v $ABS_DATA_PATH:/workspace/data/nuscenes:ro"
     EVAL_CMD="$EVAL_CMD -v $OUTPUT_DIR:/workspace/outputs"
     EVAL_CMD="$EVAL_CMD -w /workspace/bevnext-sam2"
     EVAL_CMD="$EVAL_CMD -e NUSCENES_DATA_ROOT=/workspace/data/nuscenes"
