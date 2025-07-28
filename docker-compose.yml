@@ -1,125 +1,130 @@
 version: '3.8'
 
 services:
-  # Main BEVNeXt-SAM2 application
+  # Main service with volume mount (recommended)
   bevnext-sam2:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
     image: bevnext-sam2:latest
-    container_name: bevnext-sam2-app
-    runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - CUDA_VISIBLE_DEVICES=0
-      - DISPLAY=$DISPLAY
+    container_name: bevnext-sam2-main
     volumes:
-      - ./data:/workspace/data
-      - ./checkpoints:/workspace/checkpoints
+      # Mount your local nuScenes dataset (UPDATE PATH)
+      - /path/to/your/nuscenes:/workspace/data/nuscenes:ro
+      # Mount outputs to persist results
       - ./outputs:/workspace/outputs
-      - ./logs:/workspace/logs
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # Optional: mount config overrides
+      - ./configs:/workspace/configs:ro
     ports:
       - "8888:8888"  # Jupyter
       - "6006:6006"  # TensorBoard
-    stdin_open: true
-    tty: true
-    command: python examples/demo_fusion.py
-    
-  # Development environment with Jupyter
-  dev:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: bevnext-sam2:latest
-    container_name: bevnext-sam2-dev
-    runtime: nvidia
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - CUDA_VISIBLE_DEVICES=0
+      - NUSCENES_DATA_ROOT=/workspace/data/nuscenes
+      - PYTHONPATH=/workspace/bevnext-sam2
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command: bash
+    
+  # Service with persistent volume for downloaded data
+  bevnext-sam2-download:
+    build: .
+    image: bevnext-sam2:latest
+    container_name: bevnext-sam2-download
     volumes:
-      - .:/workspace/bevnext-sam2
-      - ./data:/workspace/data
-      - ./checkpoints:/workspace/checkpoints
+      # Persistent volume for downloaded dataset
+      - nuscenes_data:/workspace/data/nuscenes
       - ./outputs:/workspace/outputs
-      - ./logs:/workspace/logs
+    ports:
+      - "8889:8888"  # Different port to avoid conflicts
+      - "6007:6006"
+    environment:
+      - NUSCENES_DATA_ROOT=/workspace/data/nuscenes
+      - DOWNLOAD_NUSCENES=true
+      - PYTHONPATH=/workspace/bevnext-sam2
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command: bash
+
+  # Service for Jupyter development
+  bevnext-sam2-jupyter:
+    build: .
+    image: bevnext-sam2:latest
+    container_name: bevnext-sam2-jupyter
+    volumes:
+      - /path/to/your/nuscenes:/workspace/data/nuscenes:ro
+      - ./outputs:/workspace/outputs
+      - ./notebooks:/workspace/notebooks  # Mount notebook directory
     ports:
       - "8888:8888"
       - "6006:6006"
-    working_dir: /workspace/bevnext-sam2
-    stdin_open: true
-    tty: true
-    command: |
-      bash -c "
-        jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token='' --NotebookApp.password=''
-      "
-    
-  # Training service
-  train:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: bevnext-sam2:latest
-    container_name: bevnext-sam2-train
-    runtime: nvidia
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-    volumes:
-      - ./data:/workspace/data
-      - ./checkpoints:/workspace/checkpoints
-      - ./outputs:/workspace/outputs
-      - ./logs:/workspace/logs
-      - ./configs:/workspace/bevnext-sam2/configs
-    working_dir: /workspace/bevnext-sam2
-    stdin_open: true
-    tty: true
-    command: echo "Ready for training. Use docker-compose exec train bash to start training."
-    
-  # Inference service
-  inference:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: bevnext-sam2:latest
-    container_name: bevnext-sam2-inference
-    runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-    volumes:
-      - ./data:/workspace/data
-      - ./checkpoints:/workspace/checkpoints
-      - ./outputs:/workspace/outputs
-      - ./configs:/workspace/bevnext-sam2/configs
-    working_dir: /workspace/bevnext-sam2
-    stdin_open: true
-    tty: true
-    command: echo "Ready for inference. Use docker-compose exec inference bash to start inference."
+      - NUSCENES_DATA_ROOT=/workspace/data/nuscenes
+      - PYTHONPATH=/workspace/bevnext-sam2
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command: >
+      bash -c "mkdir -p /workspace/notebooks && 
+               jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root 
+               --notebook-dir=/workspace/notebooks"
 
-  # TensorBoard service
-  tensorboard:
-    build:
-      context: .
-      dockerfile: Dockerfile
+  # Service for training with mounted data
+  bevnext-sam2-training:
+    build: .
     image: bevnext-sam2:latest
-    container_name: bevnext-sam2-tensorboard
+    container_name: bevnext-sam2-training
     volumes:
-      - ./logs:/workspace/logs
+      - /path/to/your/nuscenes:/workspace/data/nuscenes:ro
+      - ./outputs:/workspace/outputs
+      - ./checkpoints:/workspace/checkpoints
     ports:
-      - "6006:6006"
-    command: tensorboard --logdir=/workspace/logs --host=0.0.0.0 --port=6006
+      - "6006:6006"  # Only TensorBoard for training monitoring
+    environment:
+      - NUSCENES_DATA_ROOT=/workspace/data/nuscenes
+      - PYTHONPATH=/workspace/bevnext-sam2
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command: python training/train_bevnext_sam2_nuscenes.py --data-root /workspace/data/nuscenes
 
-# Define volumes for persistent data
+  # Service for evaluation only
+  bevnext-sam2-eval:
+    build: .
+    image: bevnext-sam2:latest
+    container_name: bevnext-sam2-eval
+    volumes:
+      - /path/to/your/nuscenes:/workspace/data/nuscenes:ro
+      - ./outputs:/workspace/outputs
+      - ./checkpoints:/workspace/checkpoints
+    environment:
+      - NUSCENES_DATA_ROOT=/workspace/data/nuscenes
+      - PYTHONPATH=/workspace/bevnext-sam2
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command: bash -c "scripts/run.sh eval"
+
 volumes:
-  data:
-    driver: local
-  checkpoints:
-    driver: local
-  outputs:
-    driver: local
-  logs:
-    driver: local
-
-# Define networks
-networks:
-  default:
-    driver: bridge 
+  # Persistent volume for downloaded nuScenes data
+  nuscenes_data:
+    driver: local 

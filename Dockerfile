@@ -173,9 +173,9 @@ RUN mkdir -p /workspace/data /workspace/checkpoints /workspace/outputs \
     /workspace/data/nuscenes /workspace/outputs/validation_reports \
     /workspace/outputs/analysis_output /workspace/outputs/training_nuscenes
 
-# Copy nuScenes dataset directly into the image
-# This assumes the nuScenes dataset is located at ../../nuscenes relative to the Dockerfile
-COPY nuscenes /workspace/data/nuscenes
+# IMPORTANT: Mount nuScenes dataset as volume instead of copying
+# Use: docker run -v /path/to/host/nuscenes:/workspace/data/nuscenes ...
+# This saves storage space and build time while keeping data on host
 
 # Set environment variables for the application
 ENV PYTHONPATH=/workspace/bevnext-sam2
