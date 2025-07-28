@@ -869,11 +869,28 @@ class NuScenesTrainer:
         self.output_dir = Path(self.config['output_dir'])
 
         try:
+            # Create directory with parents and proper permissions
             self.output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Ensure the directory is writable by changing permissions
+            import subprocess
+            import os
+            try:
+                # Make sure the directory is writable by the current user
+                os.chmod(self.output_dir, 0o755)
+                # Also ensure parent directories are accessible
+                for parent in self.output_dir.parents:
+                    if parent.exists():
+                        os.chmod(parent, 0o755)
+            except (PermissionError, OSError):
+                # If we can't change permissions, continue anyway
+                pass
 
             # Setup tensorboard
             if TENSORBOARD_AVAILABLE:
-                self.writer = SummaryWriter(self.output_dir / 'tensorboard')
+                tb_dir = self.output_dir / 'tensorboard'
+                tb_dir.mkdir(parents=True, exist_ok=True)
+                self.writer = SummaryWriter(tb_dir)
             else:
                 self.writer = None
                 logger.warning("TensorBoard not available, logging will be limited.")
@@ -1039,6 +1056,14 @@ class NuScenesTrainer:
 
     def save_checkpoint(self, is_best: bool = False):
         """Save model checkpoint"""
+        # Ensure output directory exists with proper permissions
+        try:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            import os
+            os.chmod(self.output_dir, 0o755)
+        except (PermissionError, OSError) as e:
+            logger.warning(f"Could not ensure output directory permissions: {e}")
+        
         checkpoint = {
             'epoch': self.epoch,
             'model_state_dict': self.model.state_dict(),
@@ -1051,18 +1076,27 @@ class NuScenesTrainer:
 
         # Save latest checkpoint
         latest_path = self.output_dir / 'checkpoint_latest.pth'
-        torch.save(checkpoint, latest_path)
+        try:
+            torch.save(checkpoint, latest_path)
+        except (PermissionError, OSError) as e:
+            logger.warning(f"Failed to save latest checkpoint: {e}")
 
         # Save best checkpoint
         if is_best:
             best_path = self.output_dir / 'checkpoint_best.pth'
-            torch.save(checkpoint, best_path)
-            logger.info(f"New best model saved with val_loss: {self.best_val_loss:.4f}")
+            try:
+                torch.save(checkpoint, best_path)
+                logger.info(f"New best model saved with val_loss: {self.best_val_loss:.4f}")
+            except (PermissionError, OSError) as e:
+                logger.warning(f"Failed to save best checkpoint: {e}")
 
         # Save epoch checkpoint
         if (self.epoch + 1) % 10 == 0:
             epoch_path = self.output_dir / f'checkpoint_epoch_{self.epoch+1}.pth'
-            torch.save(checkpoint, epoch_path)
+            try:
+                torch.save(checkpoint, epoch_path)
+            except (PermissionError, OSError) as e:
+                logger.warning(f"Failed to save epoch checkpoint: {e}")
 
     def train(self):
         """Main training loop"""
