@@ -128,11 +128,21 @@ class EnhancedBEVNeXtSAM2Model(nn.Module):
     def _init_sam2(self):
         """Initialize SAM2 for feature extraction"""
         if not SAM2_AVAILABLE:
-            raise ImportError("SAM2 module not available. Please install sam2_module.")
+            logger.warning("SAM2 module not available. Using placeholder features.")
+            self.sam2_model = None
+            self.sam2_predictor = None
+            return
         
         # SAM2 configuration
-        sam2_config = self.config.get('sam2_config', 'configs/sam2/sam2/sam2_hiera_s.yaml')
-        sam2_checkpoint = self.config.get('sam2_checkpoint', 'checkpoints/latest.pth')
+        sam2_config = self.config.get('sam2_config')
+        sam2_checkpoint = self.config.get('sam2_checkpoint')
+        
+        # If no config provided, use placeholder
+        if sam2_config is None or sam2_checkpoint is None:
+            logger.warning("SAM2 config or checkpoint not provided. Using placeholder features.")
+            self.sam2_model = None
+            self.sam2_predictor = None
+            return
         
         try:
             # Load SAM2 model
@@ -673,6 +683,10 @@ class NuScenesTrainer:
         # Setup scheduler
         self.scheduler = self._setup_scheduler()
         
+        # Initialize data loaders as None first
+        self.train_loader = None
+        self.val_loader = None
+        
         # Setup data loaders with error handling
         try:
             self.train_loader = self._create_dataloader('train')
@@ -680,18 +694,8 @@ class NuScenesTrainer:
             logger.info(f"Data loaders created successfully - Train: {len(self.train_loader.dataset)}, Val: {len(self.val_loader.dataset)}")
         except Exception as e:
             logger.error(f"Failed to create data loaders: {e}")
-            # Create dummy loaders for testing
-            from torch.utils.data import TensorDataset
-            dummy_data = torch.zeros(10, 6, 3, 224, 224)  # [B, N_cams, C, H, W]
-            dummy_targets = {
-                'gt_boxes': torch.zeros(10, 100, 10),
-                'gt_labels': torch.zeros(10, 100, dtype=torch.long),
-                'gt_valid': torch.zeros(10, 100, dtype=torch.bool)
-            }
-            dummy_dataset = TensorDataset(dummy_data)
-            self.train_loader = DataLoader(dummy_dataset, batch_size=1, shuffle=False)
-            self.val_loader = DataLoader(dummy_dataset, batch_size=1, shuffle=False)
-            logger.warning("Using dummy data loaders - nuScenes dataset not available")
+            logger.warning("Creating dummy data loaders for testing...")
+            self._create_dummy_loaders()
         
         # Setup logging
         self.setup_logging()
@@ -700,7 +704,52 @@ class NuScenesTrainer:
         self.epoch = 0
         self.best_val_loss = float('inf')
         self.training_stats = defaultdict(list)
+    
+    def _create_dummy_loaders(self):
+        """Create dummy data loaders for testing when real dataset is not available"""
+        from torch.utils.data import TensorDataset, DataLoader
         
+        # Create dummy dataset
+        dummy_data = torch.zeros(10, 6, 3, 224, 224)  # [B, N_cams, C, H, W]
+        dummy_targets = torch.zeros(10, 100, 10)  # [B, N_objects, 10] (boxes)
+        dummy_labels = torch.zeros(10, 100, dtype=torch.long)  # [B, N_objects]
+        dummy_valid = torch.zeros(10, 100, dtype=torch.bool)  # [B, N_objects]
+        
+        # Create dataset with all components
+        class DummyDataset(TensorDataset):
+            def __getitem__(self, idx):
+                return {
+                    'camera_images': dummy_data[idx],
+                    'gt_boxes': dummy_targets[idx],
+                    'gt_labels': dummy_labels[idx],
+                    'gt_valid': dummy_valid[idx],
+                    'sample_token': f'dummy_{idx}',
+                    'camera_intrinsics': torch.eye(3, 4),
+                    'camera_extrinsics': torch.eye(4, 4)
+                }
+            
+            def __len__(self):
+                return len(dummy_data)
+        
+        dummy_dataset = DummyDataset(dummy_data)
+        
+        # Create data loaders
+        self.train_loader = DataLoader(
+            dummy_dataset, 
+            batch_size=self.config.get('batch_size', 1), 
+            shuffle=True,
+            num_workers=0
+        )
+        self.val_loader = DataLoader(
+            dummy_dataset, 
+            batch_size=self.config.get('batch_size', 1), 
+            shuffle=False,
+            num_workers=0
+        )
+        
+        logger.warning("Using dummy data loaders - nuScenes dataset not available")
+        logger.warning("This is for testing only. For real training, ensure nuScenes dataset is properly configured.")
+    
     def _setup_optimizer(self) -> torch.optim.Optimizer:
         """Setup optimizer with parameter groups"""
         # Different learning rates for different components
@@ -1039,9 +1088,9 @@ def get_enhanced_config(data_root: str = "data/nuscenes") -> Dict:
         'num_classes': 23,  # nuScenes categories
         'num_queries': 100,  # Reduced for memory efficiency
         
-        # SAM2 configuration
-        'sam2_config': 'sam2_module/configs/sam2/sam2_hiera_s.yaml',  # Use small model for efficiency
-        'sam2_checkpoint': 'checkpoints/latest.pth',
+        # SAM2 configuration - Use a simpler approach without external config
+        'sam2_config': None,  # Disable external SAM2 config for now
+        'sam2_checkpoint': None,  # Disable external checkpoint for now
         
         # Multi-modal configuration
         'use_camera': True,
@@ -1083,6 +1132,8 @@ def main():
     parser.add_argument('--config', type=str, help='Path to config file')
     parser.add_argument('--resume', type=str, help='Path to checkpoint to resume from')
     parser.add_argument('--mixed-precision', action='store_true', help='Enable mixed precision training')
+    parser.add_argument('--epochs', type=int, help='Number of training epochs')
+    parser.add_argument('--batch-size', type=int, help='Training batch size')
     
     args = parser.parse_args()
     
@@ -1092,6 +1143,14 @@ def main():
             config = json.load(f)
     else:
         config = get_enhanced_config(args.data_root)
+    
+    # Override config with command line arguments
+    if args.epochs:
+        config['num_epochs'] = args.epochs
+    if args.batch_size:
+        config['batch_size'] = args.batch_size
+    if args.data_root != 'data/nuscenes':
+        config['data_root'] = args.data_root
     
     # Validate nuScenes availability
     if not NUSCENES_AVAILABLE:
