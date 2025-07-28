@@ -654,8 +654,24 @@ class EnhancedBEVNeXtSAM2Model(nn.Module):
         else:
             losses['regression'] = torch.tensor(0.0, device=pred_reg.device)
         
-        # Confidence loss
-        target_conf = target_valid.float().unsqueeze(-1)  # [B, num_queries, 1]
+        # Confidence loss - ensure target shape matches prediction shape
+        B, num_queries = pred_conf.shape[:2]
+        
+        # Create a properly shaped target confidence tensor
+        if target_valid.numel() == 0 or target_valid.shape[1] == 0:
+            # No valid annotations - create all-zero confidence targets
+            target_conf = torch.zeros(B, num_queries, 1, device=pred_conf.device)
+        else:
+            # Ensure target_valid has the correct shape [B, num_queries]
+            if target_valid.shape[1] != num_queries:
+                # Pad or truncate to match num_queries
+                target_conf_temp = torch.zeros(B, num_queries, device=target_valid.device, dtype=target_valid.dtype)
+                min_queries = min(target_valid.shape[1], num_queries)
+                target_conf_temp[:, :min_queries] = target_valid[:, :min_queries]
+                target_conf = target_conf_temp.float().unsqueeze(-1)
+            else:
+                target_conf = target_valid.float().unsqueeze(-1)  # [B, num_queries, 1]
+        
         losses['confidence'] = self.conf_loss(pred_conf, target_conf)
         
         # Total loss with weights
