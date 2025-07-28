@@ -184,7 +184,7 @@ ENV NUSCENES_DATA_ROOT=/workspace/data/nuscenes
 # Create a non-root user
 RUN useradd -m -u 1000 -s /bin/bash bevnext && \
     chown -R bevnext:bevnext /workspace && \
-    chmod 755 /workspace/data /workspace/outputs
+    chmod -R 755 /workspace/data /workspace/outputs /workspace/checkpoints
 
 # Switch to non-root user
 USER bevnext

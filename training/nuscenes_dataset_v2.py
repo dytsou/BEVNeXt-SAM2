@@ -103,8 +103,9 @@ class NuScenesDataAnalyzer:
         """Get statistics for each sensor type"""
         sensor_counts = defaultdict(int)
         for sample_data in self.nusc.sample_data:
-            sensor_token = sample_data['sensor_token']
-            sensor = self.nusc.get('sensor', sensor_token)
+            # Use calibrated_sensor_token to get sensor info
+            calibrated_sensor = self.nusc.get('calibrated_sensor', sample_data['calibrated_sensor_token'])
+            sensor = self.nusc.get('sensor', calibrated_sensor['sensor_token'])
             sensor_counts[sensor['channel']] += 1
         return dict(sensor_counts)
     
@@ -177,8 +178,9 @@ class NuScenesTokenManager:
         for sample_data in self.nusc.sample_data:
             if sample_data['is_key_frame']:
                 sample_token = sample_data['sample_token']
-                sensor_token = sample_data['sensor_token']
-                sensor = self.nusc.get('sensor', sensor_token)
+                # Use calibrated_sensor_token to get sensor info
+                calibrated_sensor = self.nusc.get('calibrated_sensor', sample_data['calibrated_sensor_token'])
+                sensor = self.nusc.get('sensor', calibrated_sensor['sensor_token'])
                 self.sample_to_sample_data[sample_token][sensor['channel']] = sample_data['token']
         
         logger.info(f"Built token maps for {len(self.sample_to_scene)} samples")
