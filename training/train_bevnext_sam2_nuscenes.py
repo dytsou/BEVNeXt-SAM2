@@ -669,11 +669,25 @@ class NuScenesTrainer:
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.use_mixed_precision = use_mixed_precision and torch.cuda.is_available()
         
+        # Initialize data loaders as None first (before any potential failures)
+        self.train_loader = None
+        self.val_loader = None
+        
+        # Initialize training state early
+        self.epoch = 0
+        self.best_val_loss = float('inf')
+        self.training_stats = defaultdict(list)
+        
         # Setup model
         self.model = EnhancedBEVNeXtSAM2Model(config).to(self.device)
         
         # Setup optimizer with different learning rates for different components
-        self.optimizer = self._setup_optimizer()
+        try:
+            self.optimizer = self._setup_optimizer()
+        except Exception as e:
+            logger.warning(f"Failed to setup custom optimizer: {e}")
+            logger.info("Using default Adam optimizer")
+            self.optimizer = optim.Adam(self.model.parameters(), lr=self.config.get('learning_rate', 1e-4))
         
         # Setup mixed precision scaler
         if self.use_mixed_precision:
@@ -681,11 +695,12 @@ class NuScenesTrainer:
             logger.info("Mixed precision training enabled")
         
         # Setup scheduler
-        self.scheduler = self._setup_scheduler()
-        
-        # Initialize data loaders as None first
-        self.train_loader = None
-        self.val_loader = None
+        try:
+            self.scheduler = self._setup_scheduler()
+        except Exception as e:
+            logger.warning(f"Failed to setup custom scheduler: {e}")
+            logger.info("Using default StepLR scheduler")
+            self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=10, gamma=0.1)
         
         # Setup data loaders with error handling
         try:
@@ -699,11 +714,6 @@ class NuScenesTrainer:
         
         # Setup logging
         self.setup_logging()
-        
-        # Training state
-        self.epoch = 0
-        self.best_val_loss = float('inf')
-        self.training_stats = defaultdict(list)
     
     def _create_dummy_loaders(self):
         """Create dummy data loaders for testing when real dataset is not available"""
@@ -833,21 +843,28 @@ class NuScenesTrainer:
     def setup_logging(self):
         """Setup logging and tensorboard"""
         self.output_dir = Path(self.config['output_dir'])
-        self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Setup tensorboard
-        if TENSORBOARD_AVAILABLE:
-            self.writer = SummaryWriter(self.output_dir / 'tensorboard')
-        else:
+        try:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Setup tensorboard
+            if TENSORBOARD_AVAILABLE:
+                self.writer = SummaryWriter(self.output_dir / 'tensorboard')
+            else:
+                self.writer = None
+                logger.warning("TensorBoard not available, logging will be limited.")
+            
+            # Save configuration
+            config_path = self.output_dir / 'config.json'
+            with open(config_path, 'w') as f:
+                json.dump(self.config, f, indent=2)
+            
+            logger.info(f"Logging setup complete. Output directory: {self.output_dir}")
+            
+        except (PermissionError, OSError) as e:
+            logger.warning(f"Failed to setup logging directory {self.output_dir}: {e}")
+            logger.warning("Running without persistent logging")
             self.writer = None
-            logger.warning("TensorBoard not available, logging will be limited.")
-        
-        # Save configuration
-        config_path = self.output_dir / 'config.json'
-        with open(config_path, 'w') as f:
-            json.dump(self.config, f, indent=2)
-        
-        logger.info(f"Logging setup complete. Output directory: {self.output_dir}")
     
     def train_epoch(self) -> Dict[str, float]:
         """Train for one epoch"""

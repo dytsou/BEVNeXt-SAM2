@@ -1,0 +1,43 @@
+{
+  "data_root": "/workspace/data/nuscenes",
+  "nuscenes_version": "v1.0-trainval",
+  "d_model": 128,
+  "nhead": 8,
+  "num_transformer_layers": 4,
+  "num_classes": 23,
+  "num_queries": 100,
+  "sam2_config": null,
+  "sam2_checkpoint": null,
+  "use_camera": true,
+  "use_lidar": false,
+  "use_radar": false,
+  "camera_names": [
+    "CAM_FRONT",
+    "CAM_FRONT_RIGHT",
+    "CAM_FRONT_LEFT",
+    "CAM_BACK",
+    "CAM_BACK_RIGHT",
+    "CAM_BACK_LEFT"
+  ],
+  "image_size": [
+    224,
+    224
+  ],
+  "bev_size": [
+    48,
+    48
+  ],
+  "batch_size": 1,
+  "learning_rate": 0.0001,
+  "weight_decay": 0.0001,
+  "num_epochs": 1,
+  "num_workers": 2,
+  "loss_weights": {
+    "cls": 1.0,
+    "reg": 5.0,
+    "conf": 1.0
+  },
+  "gradient_checkpointing": true,
+  "use_augmentation": true,
+  "output_dir": "/workspace/outputs/training_nuscenes_enhanced"
+}
