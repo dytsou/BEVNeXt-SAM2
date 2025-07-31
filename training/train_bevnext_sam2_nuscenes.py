@@ -1055,14 +1055,37 @@ class NuScenesTrainer:
         return metrics
 
     def save_checkpoint(self, is_best: bool = False):
-        """Save model checkpoint"""
-        # Ensure output directory exists with proper permissions
-        try:
-            self.output_dir.mkdir(parents=True, exist_ok=True)
-            import os
-            os.chmod(self.output_dir, 0o755)
-        except (PermissionError, OSError) as e:
-            logger.warning(f"Could not ensure output directory permissions: {e}")
+        """Save model checkpoint with fallback directory support"""
+        import tempfile
+        import os
+        
+        # Try to determine a writable output directory
+        output_dirs_to_try = [
+            self.output_dir,
+            Path('/tmp/bevnext_checkpoints'),  # Fallback to /tmp
+            Path(tempfile.gettempdir()) / 'bevnext_checkpoints'  # System temp dir
+        ]
+        
+        successful_dir = None
+        for try_dir in output_dirs_to_try:
+            try:
+                try_dir.mkdir(parents=True, exist_ok=True)
+                # Test write permissions by creating a small test file
+                test_file = try_dir / 'write_test.tmp'
+                test_file.write_text('test')
+                test_file.unlink()  # Remove test file
+                successful_dir = try_dir
+                break
+            except (PermissionError, OSError) as e:
+                logger.warning(f"Cannot write to {try_dir}: {e}")
+                continue
+        
+        if successful_dir is None:
+            logger.error("No writable directory found for checkpoints! Training will continue without saving.")
+            return
+        
+        if successful_dir != self.output_dir:
+            logger.warning(f"Using fallback checkpoint directory: {successful_dir}")
         
         checkpoint = {
             'epoch': self.epoch,
@@ -1075,28 +1098,30 @@ class NuScenesTrainer:
         }
 
         # Save latest checkpoint
-        latest_path = self.output_dir / 'checkpoint_latest.pth'
+        latest_path = successful_dir / 'checkpoint_latest.pth'
         try:
             torch.save(checkpoint, latest_path)
-        except (PermissionError, OSError) as e:
-            logger.warning(f"Failed to save latest checkpoint: {e}")
+            logger.info(f"Latest checkpoint saved to: {latest_path}")
+        except Exception as e:
+            logger.error(f"Failed to save latest checkpoint: {e}")
 
         # Save best checkpoint
         if is_best:
-            best_path = self.output_dir / 'checkpoint_best.pth'
+            best_path = successful_dir / 'checkpoint_best.pth'
             try:
                 torch.save(checkpoint, best_path)
-                logger.info(f"New best model saved with val_loss: {self.best_val_loss:.4f}")
-            except (PermissionError, OSError) as e:
-                logger.warning(f"Failed to save best checkpoint: {e}")
+                logger.info(f"New best model saved with val_loss: {self.best_val_loss:.4f} to: {best_path}")
+            except Exception as e:
+                logger.error(f"Failed to save best checkpoint: {e}")
 
         # Save epoch checkpoint
         if (self.epoch + 1) % 10 == 0:
-            epoch_path = self.output_dir / f'checkpoint_epoch_{self.epoch+1}.pth'
+            epoch_path = successful_dir / f'checkpoint_epoch_{self.epoch+1}.pth'
             try:
                 torch.save(checkpoint, epoch_path)
-            except (PermissionError, OSError) as e:
-                logger.warning(f"Failed to save epoch checkpoint: {e}")
+                logger.info(f"Epoch {self.epoch+1} checkpoint saved to: {epoch_path}")
+            except Exception as e:
+                logger.error(f"Failed to save epoch checkpoint: {e}")
 
     def train(self):
         """Main training loop"""
