@@ -718,6 +718,26 @@ class NuScenesTrainer:
             self.scaler = torch.cuda.amp.GradScaler()
             logger.info("Mixed precision training enabled")
 
+        # Setup data loaders
+        try:
+            self.train_loader = self._create_dataloader('train')
+            self.val_loader = self._create_dataloader('val')
+            logger.info(f"Data loaders created successfully - Train: {len(self.train_loader.dataset)}, Val: {len(self.val_loader.dataset)}")
+        except Exception as e:
+            logger.error(f"Failed to create data loaders: {e}")
+            # Create dummy loaders for testing
+            from torch.utils.data import TensorDataset
+            dummy_data = torch.zeros(10, 6, 3, 224, 224)
+            dummy_targets = {
+                'gt_boxes': torch.zeros(10, 100, 10),
+                'gt_labels': torch.zeros(10, 100, dtype=torch.long),
+                'gt_valid': torch.zeros(10, 100, dtype=torch.bool)
+            }
+            dummy_dataset = TensorDataset(dummy_data)
+            self.train_loader = DataLoader(dummy_dataset, batch_size=1, shuffle=False)
+            self.val_loader = DataLoader(dummy_dataset, batch_size=1, shuffle=False)
+            logger.warning("Using dummy data loaders - nuScenes dataset not available")
+
         # Setup scheduler
         try:
             self.scheduler = self._setup_scheduler()
@@ -725,16 +745,6 @@ class NuScenesTrainer:
             logger.warning(f"Failed to setup custom scheduler: {e}")
             logger.info("Using default StepLR scheduler")
             self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=10, gamma=0.1)
-
-        # Setup data loaders with error handling
-        try:
-            self.train_loader = self._create_dataloader('train')
-            self.val_loader = self._create_dataloader('val')
-            logger.info(f"Data loaders created successfully - Train: {len(self.train_loader.dataset)}, Val: {len(self.val_loader.dataset)}")
-        except Exception as e:
-            logger.error(f"Failed to create data loaders: {e}")
-            logger.warning("Creating dummy data loaders for testing...")
-            self._create_dummy_loaders()
 
         # Setup logging
         self.setup_logging()

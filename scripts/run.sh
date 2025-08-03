@@ -27,7 +27,7 @@ ABS_OUTPUTS_PATH="$(realpath "$PROJECT_ROOT/outputs" 2>/dev/null || echo "$PROJE
 ABS_LOGS_PATH="$(realpath "$PROJECT_ROOT/logs" 2>/dev/null || echo "$PROJECT_ROOT/logs")"
 
 # Docker options
-DOCKER_OPTS="--rm -it"
+DOCKER_OPTS="--rm -it --user $(id -u):$(id -g)"
 
 print_help() {
     echo -e "${BLUE}BEVNeXt-SAM2 Management Script${NC}"
