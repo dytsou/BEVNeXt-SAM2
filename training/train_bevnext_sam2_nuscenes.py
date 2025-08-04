@@ -48,6 +48,15 @@ from collections import defaultdict, OrderedDict
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Import multi-GPU utilities
+from training.multi_gpu_utils import (
+    MultiGPUWrapper, 
+    setup_multi_gpu_training,
+    optimize_dataloader_for_multigpu,
+    log_gpu_memory_usage,
+    GradientAccumulator
+)
+
 # Import nuScenes components
 try:
     from nuscenes_dataset_v2 import (
@@ -688,10 +697,30 @@ class EnhancedBEVNeXtSAM2Model(nn.Module):
 class NuScenesTrainer:
     """Enhanced trainer for nuScenes dataset"""
 
-    def __init__(self, config: Dict, use_mixed_precision: bool = True):
+    def __init__(
+        self, 
+        config: Dict, 
+        use_mixed_precision: bool = True,
+        gpu_ids: Optional[str] = None,
+        distributed: bool = False,
+        gradient_accumulation: int = 1,
+        lr_scaling: str = 'linear'
+    ):
         self.config = config
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.use_mixed_precision = use_mixed_precision and torch.cuda.is_available()
+        self.gradient_accumulation = gradient_accumulation
+
+        # Setup multi-GPU wrapper
+        self.gpu_wrapper = MultiGPUWrapper(
+            gpu_ids=gpu_ids,
+            distributed=distributed
+        )
+        
+        # Setup distributed training if needed
+        if distributed:
+            self.gpu_wrapper.setup_distributed()
+        
+        self.device = self.gpu_wrapper.device
 
         # Initialize data loaders as None first (before any potential failures)
         self.train_loader = None
@@ -703,7 +732,15 @@ class NuScenesTrainer:
         self.training_stats = defaultdict(list)
 
         # Setup model
-        self.model = EnhancedBEVNeXtSAM2Model(config).to(self.device)
+        model = EnhancedBEVNeXtSAM2Model(config)
+        self.model = self.gpu_wrapper.wrap_model(model)
+
+        # Scale learning rate for multi-GPU training
+        base_lr = self.config.get('learning_rate', 1e-4)
+        scaled_lr = self.gpu_wrapper.scale_learning_rate(base_lr, lr_scaling)
+        
+        # Update config with scaled learning rate
+        self.config['learning_rate'] = scaled_lr
 
         # Setup optimizer with different learning rates for different components
         try:
@@ -711,12 +748,19 @@ class NuScenesTrainer:
         except Exception as e:
             logger.warning(f"Failed to setup custom optimizer: {e}")
             logger.info("Using default Adam optimizer")
-            self.optimizer = optim.Adam(self.model.parameters(), lr=self.config.get('learning_rate', 1e-4))
+            self.optimizer = optim.Adam(self.model.parameters(), lr=scaled_lr)
 
         # Setup mixed precision scaler
         if self.use_mixed_precision:
             self.scaler = torch.cuda.amp.GradScaler()
-            logger.info("Mixed precision training enabled")
+            if self.gpu_wrapper.is_main_process():
+                logger.info("Mixed precision training enabled")
+        
+        # Setup gradient accumulator
+        self.grad_accumulator = GradientAccumulator(
+            gradient_accumulation, 
+            self.gpu_wrapper
+        )
 
         # Setup data loaders
         try:
@@ -746,8 +790,22 @@ class NuScenesTrainer:
             logger.info("Using default StepLR scheduler")
             self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=10, gamma=0.1)
 
-        # Setup logging
-        self.setup_logging()
+        # Setup logging (only on main process)
+        if self.gpu_wrapper.is_main_process():
+            self.setup_logging()
+        else:
+            self.logger = logging.getLogger(__name__)
+            self.writer = None
+            
+        # Log setup information
+        if self.gpu_wrapper.is_main_process():
+            logger.info(f"Multi-GPU Training Setup:")
+            logger.info(f"  - GPUs: {self.gpu_wrapper.gpu_ids}")
+            logger.info(f"  - Mode: {'DistributedDataParallel' if distributed else 'DataParallel'}")
+            logger.info(f"  - Base LR: {base_lr}, Scaled LR: {scaled_lr}")
+            logger.info(f"  - Gradient accumulation: {gradient_accumulation}")
+            logger.info(f"  - Mixed precision: {self.use_mixed_precision}")
+            log_gpu_memory_usage(self.gpu_wrapper, "Initial GPU memory: ")
 
     def _create_dummy_loaders(self):
         """Create dummy data loaders for testing when real dataset is not available"""
@@ -866,13 +924,20 @@ class NuScenesTrainer:
             use_augmentation=self.config.get('use_augmentation', True) and split == 'train'
         )
 
-        return create_nuscenes_dataloader(
+        # Create basic dataloader
+        loader = create_nuscenes_dataloader(
             config=nuscenes_config,
             split=split,
             batch_size=self.config['batch_size'],
             num_workers=self.config['num_workers'],
             shuffle=(split == 'train')
         )
+        
+        # Optimize for multi-GPU if needed
+        if self.gpu_wrapper.num_gpus > 1:
+            loader = optimize_dataloader_for_multigpu(loader, self.gpu_wrapper)
+        
+        return loader
 
     def setup_logging(self):
         """Setup logging and tensorboard"""
@@ -1244,6 +1309,18 @@ def main():
     parser.add_argument('--mixed-precision', action='store_true', help='Enable mixed precision training')
     parser.add_argument('--epochs', type=int, help='Number of training epochs')
     parser.add_argument('--batch-size', type=int, help='Training batch size')
+    
+    # Multi-GPU arguments
+    parser.add_argument('--gpus', type=str, default=None, 
+                        help='GPU IDs to use (e.g., "0,1"). Default: use all available GPUs')
+    parser.add_argument('--distributed', action='store_true',
+                        help='Use DistributedDataParallel instead of DataParallel')
+    parser.add_argument('--local_rank', type=int, default=0,
+                        help='Local rank for distributed training')
+    parser.add_argument('--gradient-accumulation', type=int, default=1,
+                        help='Gradient accumulation steps')
+    parser.add_argument('--lr-scaling', type=str, default='linear', choices=['linear', 'sqrt', 'none'],
+                        help='Learning rate scaling rule for multi-GPU training')
 
     args = parser.parse_args()
 
@@ -1268,9 +1345,16 @@ def main():
         logger.error("Please ensure the nuScenes dataset and dependencies are properly installed.")
         return
 
-    # Create trainer
+    # Create trainer with multi-GPU support
     try:
-        trainer = NuScenesTrainer(config, use_mixed_precision=args.mixed_precision)
+        trainer = NuScenesTrainer(
+            config, 
+            use_mixed_precision=args.mixed_precision,
+            gpu_ids=args.gpus,
+            distributed=args.distributed,
+            gradient_accumulation=args.gradient_accumulation,
+            lr_scaling=args.lr_scaling
+        )
     except Exception as e:
         logger.error(f"Failed to create trainer: {e}")
         logger.error("Please check that nuScenes dataset is available and properly configured.")

@@ -28,6 +28,15 @@ import matplotlib.pyplot as plt
 # Add project root to path
 sys.path.insert(0, '/workspace/bevnext-sam2')
 
+# Import multi-GPU utilities
+from training.multi_gpu_utils import (
+    MultiGPUWrapper, 
+    setup_multi_gpu_training,
+    optimize_dataloader_for_multigpu,
+    log_gpu_memory_usage,
+    GradientAccumulator
+)
+
 class BEVNeXtSAM2Model(nn.Module):
     """Complete BEVNeXt-SAM2 model for training"""
     
@@ -339,36 +348,64 @@ class SyntheticDataset(Dataset):
 
 
 class Trainer:
-    """Main training class"""
+    """Main training class with multi-GPU support"""
     
-    def __init__(self, config: Dict, use_mixed_precision: bool = False):
+    def __init__(
+        self, 
+        config: Dict, 
+        use_mixed_precision: bool = False,
+        gpu_ids: Optional[str] = None,
+        distributed: bool = False,
+        gradient_accumulation: int = 1,
+        lr_scaling: str = 'linear'
+    ):
         self.config = config
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.use_mixed_precision = use_mixed_precision and torch.cuda.is_available()
+        self.gradient_accumulation = gradient_accumulation
+        
+        # Setup multi-GPU wrapper
+        self.gpu_wrapper = MultiGPUWrapper(
+            gpu_ids=gpu_ids,
+            distributed=distributed
+        )
+        
+        # Setup distributed training if needed
+        if distributed:
+            self.gpu_wrapper.setup_distributed()
+        
+        self.device = self.gpu_wrapper.device
         
         # Setup model
-        self.model = BEVNeXtSAM2Model(config).to(self.device)
+        model = BEVNeXtSAM2Model(config)
+        self.model = self.gpu_wrapper.wrap_model(model)
         
-        # Enable model optimizations for GPU
-        if torch.cuda.is_available():
+        # Enable model optimizations for GPU (only on main process)
+        if torch.cuda.is_available() and self.gpu_wrapper.is_main_process():
             # Compile model for faster training (PyTorch 2.0+)
-            try:
-                self.model = torch.compile(self.model)
-                print("Model compiled for faster training")
-            except:
-                print("Model compilation not available, continuing without")
+            # Note: Model compilation might not work well with DDP, so we skip it for distributed training
+            if not distributed:
+                try:
+                    self.model = torch.compile(self.model)
+                    print("Model compiled for faster training")
+                except:
+                    print("Model compilation not available, continuing without")
+        
+        # Scale learning rate for multi-GPU training
+        base_lr = config['learning_rate']
+        scaled_lr = self.gpu_wrapper.scale_learning_rate(base_lr, lr_scaling)
         
         # Setup optimizer
         self.optimizer = optim.AdamW(
             self.model.parameters(),
-            lr=config['learning_rate'],
+            lr=scaled_lr,
             weight_decay=config['weight_decay']
         )
         
         # Setup mixed precision scaler
         if self.use_mixed_precision:
             self.scaler = torch.cuda.amp.GradScaler()
-            print("Mixed precision training enabled")
+            if self.gpu_wrapper.is_main_process():
+                print("Mixed precision training enabled")
         
         # Setup scheduler
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
@@ -376,16 +413,36 @@ class Trainer:
             T_max=config['num_epochs']
         )
         
+        # Setup gradient accumulator
+        self.grad_accumulator = GradientAccumulator(
+            gradient_accumulation, 
+            self.gpu_wrapper
+        )
+        
         # Setup data loaders
         self.train_loader = self._create_dataloader('train')
         self.val_loader = self._create_dataloader('val')
         
-        # Setup logging
-        self.setup_logging()
+        # Setup logging (only on main process)
+        if self.gpu_wrapper.is_main_process():
+            self.setup_logging()
+        else:
+            self.logger = logging.getLogger(__name__)
+            self.writer = None
         
         # Training state
         self.epoch = 0
         self.best_val_loss = float('inf')
+        
+        # Log setup information
+        if self.gpu_wrapper.is_main_process():
+            print(f"Multi-GPU Training Setup:")
+            print(f"  - GPUs: {self.gpu_wrapper.gpu_ids}")
+            print(f"  - Mode: {'DistributedDataParallel' if distributed else 'DataParallel'}")
+            print(f"  - Base LR: {base_lr}, Scaled LR: {scaled_lr}")
+            print(f"  - Gradient accumulation: {gradient_accumulation}")
+            print(f"  - Mixed precision: {self.use_mixed_precision}")
+            log_gpu_memory_usage(self.gpu_wrapper, "Initial GPU memory: ")
         
     def _create_dataloader(self, split: str) -> DataLoader:
         """Create data loader for given split"""
@@ -418,7 +475,8 @@ class Trainer:
                     config=self.config
                 )
                 
-                return DataLoader(
+                # Create basic DataLoader
+                loader = DataLoader(
                     dataset,
                     batch_size=self.config['batch_size'],
                     shuffle=(split == 'train'),
@@ -432,6 +490,12 @@ class Trainer:
                         'valid_mask': torch.stack([item['valid_mask'] for item in batch])
                     }
                 )
+                
+                # Optimize for multi-GPU if needed
+                if self.gpu_wrapper.num_gpus > 1:
+                    loader = optimize_dataloader_for_multigpu(loader, self.gpu_wrapper)
+                
+                return loader
             except Exception as e:
                 print(f"Failed to create nuScenes dataset: {e}")
                 print("   Falling back to synthetic data generation")
@@ -442,13 +506,20 @@ class Trainer:
             print("Using synthetic dataset for training")
             dataset = SyntheticDataset(self.config, split)
             
-            return DataLoader(
+            # Create basic DataLoader
+            loader = DataLoader(
                 dataset,
                 batch_size=self.config['batch_size'],
                 shuffle=(split == 'train'),
                 num_workers=self.config['num_workers'],
                 pin_memory=True
             )
+            
+            # Optimize for multi-GPU if needed
+            if self.gpu_wrapper.num_gpus > 1:
+                loader = optimize_dataloader_for_multigpu(loader, self.gpu_wrapper)
+            
+            return loader
     
     def setup_logging(self):
         """Setup logging and tensorboard"""
@@ -471,12 +542,19 @@ class Trainer:
         self.logger = logging.getLogger(__name__)
     
     def train_epoch(self) -> Dict:
-        """Train for one epoch"""
+        """Train for one epoch with multi-GPU support"""
         self.model.train()
         total_loss = 0
         loss_components = {}
         
-        pbar = tqdm(self.train_loader, desc=f'Epoch {self.epoch+1} Train')
+        # Reset gradient accumulator
+        self.grad_accumulator.reset()
+        
+        # Only show progress bar on main process
+        if self.gpu_wrapper.is_main_process():
+            pbar = tqdm(self.train_loader, desc=f'Epoch {self.epoch+1} Train')
+        else:
+            pbar = self.train_loader
         
         for batch_idx, batch in enumerate(pbar):
             # Move to device
@@ -484,9 +562,11 @@ class Trainer:
                 if isinstance(batch[key], torch.Tensor):
                     batch[key] = batch[key].to(self.device)
             
-            # Forward pass with mixed precision
-            self.optimizer.zero_grad()
+            # Zero gradients only at the start of accumulation cycle
+            if batch_idx % self.gradient_accumulation == 0:
+                self.optimizer.zero_grad()
             
+            # Forward pass with mixed precision
             if self.use_mixed_precision:
                 with torch.cuda.amp.autocast():
                     predictions = self.model(batch)
@@ -498,17 +578,26 @@ class Trainer:
                         'valid_mask': batch['valid_mask']
                     }
                     losses = self.model.compute_loss(predictions, targets)
+                    
+                    # Scale loss for gradient accumulation
+                    scaled_loss = self.grad_accumulator.scale_loss(losses['total'])
                 
                 # Backward pass with gradient scaling
-                self.scaler.scale(losses['total']).backward()
+                self.scaler.scale(scaled_loss).backward()
                 
-                # Gradient clipping
-                self.scaler.unscale_(self.optimizer)
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-                
-                # Optimizer step with scaler
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
+                # Optimizer step with gradient accumulation
+                if self.grad_accumulator.should_step():
+                    # Gradient clipping
+                    self.scaler.unscale_(self.optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                    
+                    # Optimizer step with scaler
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                    
+                    # Synchronize processes for distributed training
+                    self.gpu_wrapper.barrier()
+                    
             else:
                 predictions = self.model(batch)
                 
@@ -520,13 +609,21 @@ class Trainer:
                 }
                 losses = self.model.compute_loss(predictions, targets)
                 
+                # Scale loss for gradient accumulation
+                scaled_loss = self.grad_accumulator.scale_loss(losses['total'])
+                
                 # Backward pass
-                losses['total'].backward()
+                scaled_loss.backward()
                 
-                # Gradient clipping
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-                
-                self.optimizer.step()
+                # Optimizer step with gradient accumulation
+                if self.grad_accumulator.should_step():
+                    # Gradient clipping
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                    
+                    self.optimizer.step()
+                    
+                    # Synchronize processes for distributed training
+                    self.gpu_wrapper.barrier()
             
             # Update metrics
             total_loss += losses['total'].item()
@@ -535,30 +632,47 @@ class Trainer:
                     loss_components[key] = 0
                 loss_components[key] += value.item()
             
-            # Update progress bar
-            pbar.set_postfix({
-                'loss': f"{losses['total'].item():.4f}",
-                'cls': f"{losses['classification'].item():.4f}",
-                'reg': f"{losses['regression'].item():.4f}",
-                'conf': f"{losses['confidence'].item():.4f}"
-            })
+            # Update progress bar (only on main process)
+            if self.gpu_wrapper.is_main_process() and hasattr(pbar, 'set_postfix'):
+                pbar.set_postfix({
+                    'loss': f"{losses['total'].item():.4f}",
+                    'cls': f"{losses['classification'].item():.4f}",
+                    'reg': f"{losses['regression'].item():.4f}",
+                    'conf': f"{losses['confidence'].item():.4f}",
+                    'gpu': f"{self.gpu_wrapper.num_gpus}"
+                })
             
-            # Log to tensorboard
-            global_step = self.epoch * len(self.train_loader) + batch_idx
-            self.writer.add_scalar('train/loss_total', losses['total'].item(), global_step)
-            self.writer.add_scalar('train/loss_cls', losses['classification'].item(), global_step)
-            self.writer.add_scalar('train/loss_reg', losses['regression'].item(), global_step)
-            self.writer.add_scalar('train/loss_conf', losses['confidence'].item(), global_step)
+            # Log to tensorboard (only on main process)
+            if self.gpu_wrapper.is_main_process() and self.writer:
+                global_step = self.epoch * len(self.train_loader) + batch_idx
+                self.writer.add_scalar('train/loss_total', losses['total'].item(), global_step)
+                self.writer.add_scalar('train/loss_cls', losses['classification'].item(), global_step)
+                self.writer.add_scalar('train/loss_reg', losses['regression'].item(), global_step)
+                self.writer.add_scalar('train/loss_conf', losses['confidence'].item(), global_step)
+                
+                # Log GPU memory usage occasionally
+                if batch_idx % 100 == 0:
+                    stats = self.gpu_wrapper.get_gpu_memory_stats()
+                    for gpu_name, gpu_stats in stats.items():
+                        self.writer.add_scalar(f'gpu_memory/{gpu_name}_allocated', 
+                                             gpu_stats['allocated'], global_step)
             
             # Clear GPU cache periodically to prevent memory accumulation
-            if batch_idx % 10 == 0 and torch.cuda.is_available():
+            if batch_idx % 20 == 0 and torch.cuda.is_available():
                 torch.cuda.empty_cache()
+        
+        # Synchronize all processes before computing final metrics
+        self.gpu_wrapper.barrier()
         
         # Average losses
         num_batches = len(self.train_loader)
         avg_loss = total_loss / num_batches
         for key in loss_components:
             loss_components[key] /= num_batches
+        
+        # Log GPU memory at end of epoch (main process only)
+        if self.gpu_wrapper.is_main_process():
+            log_gpu_memory_usage(self.gpu_wrapper, f"End of epoch {self.epoch+1}: ")
         
         return {'avg_loss': avg_loss, **loss_components}
     
@@ -660,18 +774,22 @@ class Trainer:
             # Update scheduler
             self.scheduler.step()
             
-            # Log epoch results
-            self.logger.info(
-                f"Epoch {epoch+1}/{self.config['num_epochs']} - "
-                f"Train Loss: {train_metrics['avg_loss']:.4f} - "
-                f"Val Loss: {val_metrics['avg_loss']:.4f} - "
-                f"LR: {self.optimizer.param_groups[0]['lr']:.6f}"
-            )
-            
-            # Log to tensorboard
-            self.writer.add_scalar('epoch/train_loss', train_metrics['avg_loss'], epoch)
-            self.writer.add_scalar('epoch/val_loss', val_metrics['avg_loss'], epoch)
-            self.writer.add_scalar('epoch/learning_rate', self.optimizer.param_groups[0]['lr'], epoch)
+            # Log epoch results (only on main process)
+            if self.gpu_wrapper.is_main_process():
+                self.logger.info(
+                    f"Epoch {epoch+1}/{self.config['num_epochs']} - "
+                    f"Train Loss: {train_metrics['avg_loss']:.4f} - "
+                    f"Val Loss: {val_metrics['avg_loss']:.4f} - "
+                    f"LR: {self.optimizer.param_groups[0]['lr']:.6f} - "
+                    f"GPUs: {self.gpu_wrapper.num_gpus}"
+                )
+                
+                # Log to tensorboard
+                if self.writer:
+                    self.writer.add_scalar('epoch/train_loss', train_metrics['avg_loss'], epoch)
+                    self.writer.add_scalar('epoch/val_loss', val_metrics['avg_loss'], epoch)
+                    self.writer.add_scalar('epoch/learning_rate', self.optimizer.param_groups[0]['lr'], epoch)
+                    self.writer.add_scalar('epoch/num_gpus', self.gpu_wrapper.num_gpus, epoch)
             
             # Save checkpoint
             is_best = val_metrics['avg_loss'] < self.best_val_loss
@@ -689,8 +807,14 @@ class Trainer:
                     'config': self.config
                 }, epoch_checkpoint_path)
         
-        self.logger.info("Training completed!")
-        self.writer.close()
+        # Cleanup multi-GPU resources
+        if self.gpu_wrapper.is_main_process():
+            self.logger.info("Training completed!")
+            if self.writer:
+                self.writer.close()
+        
+        # Cleanup distributed training
+        self.gpu_wrapper.cleanup()
 
 
 def get_gpu_memory_config():
@@ -904,6 +1028,19 @@ def main():
     parser.add_argument('--resume', type=str, help='Path to checkpoint to resume from')
     parser.add_argument('--mixed-precision', action='store_true', help='Enable mixed precision training')
     parser.add_argument('--force-config', action='store_true', help='Force use of config file instead of auto-detection')
+    
+    # Multi-GPU arguments
+    parser.add_argument('--gpus', type=str, default=None, 
+                        help='GPU IDs to use (e.g., "0,1"). Default: use all available GPUs')
+    parser.add_argument('--distributed', action='store_true',
+                        help='Use DistributedDataParallel instead of DataParallel')
+    parser.add_argument('--local_rank', type=int, default=0,
+                        help='Local rank for distributed training')
+    parser.add_argument('--gradient-accumulation', type=int, default=1,
+                        help='Gradient accumulation steps')
+    parser.add_argument('--lr-scaling', type=str, default='linear', choices=['linear', 'sqrt', 'none'],
+                        help='Learning rate scaling rule for multi-GPU training')
+    
     args = parser.parse_args()
     
     # Load config with dynamic GPU detection
@@ -949,8 +1086,15 @@ def main():
     print(f"  Gradient checkpointing: {config.get('gradient_checkpointing', False)}")
     print(f"  Memory fraction: {config.get('memory_fraction', 0.8)}")
     
-    # Create trainer
-    trainer = Trainer(config, use_mixed_precision=args.mixed_precision)
+    # Create trainer with multi-GPU support
+    trainer = Trainer(
+        config, 
+        use_mixed_precision=args.mixed_precision,
+        gpu_ids=args.gpus,
+        distributed=args.distributed,
+        gradient_accumulation=args.gradient_accumulation,
+        lr_scaling=args.lr_scaling
+    )
     
     # Resume if specified
     if args.resume:
