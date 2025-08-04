@@ -121,7 +121,7 @@ def show_result(points,
                         points_in_box_color=palette[i])
 
         if gt_bboxes is not None:
-            vis.add_bboxes(bbox3d=gt_bboxes, bbox_color=(0, 0, 1))
+            vis.add_bboxes(bbox3d=gt_bboxes, bbox_color=(1, 0, 0))
         show_path = osp.join(result_path,
                              f'{filename}_online.png') if snapshot else None
         vis.show(show_path)
@@ -226,8 +226,8 @@ def show_multi_modality_result(img,
                                box_mode='lidar',
                                img_metas=None,
                                show=False,
-                               gt_bbox_color=(61, 102, 255),
-                               pred_bbox_color=(241, 101, 72)):
+                               gt_bbox_color=(0, 0, 255),
+                               pred_bbox_color=(0, 255, 0)):
     """Convert multi-modality detection results into 2D results.
 
     Project the predicted 3D bbox to 2D image plane and visualize them.

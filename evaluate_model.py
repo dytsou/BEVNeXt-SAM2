@@ -302,7 +302,7 @@ def save_sample_visualizations(sample, prediction, ground_truth, output_dir, sam
             for i, bbox in enumerate(gt_boxes):
                 print(f"  GT Box {i}: center=({bbox[0]:.1f}, {bbox[1]:.1f}, {bbox[2]:.1f}), size=({bbox[3]:.1f}, {bbox[4]:.1f}, {bbox[5]:.1f})")
                 img = draw_3d_bbox_on_image(img, bbox, current_intrinsic, current_extrinsic, 
-                                          color=(0, 255, 0), thickness=3)  # Green for GT
+                                          color=(0, 0, 255), thickness=3)  # Red for GT
         
         # Draw predicted bounding boxes (red)
         if 'boxes_3d' in prediction and len(prediction['boxes_3d']) > 0:
@@ -314,7 +314,7 @@ def save_sample_visualizations(sample, prediction, ground_truth, output_dir, sam
                 if score > 0.3:
                     print(f"  Pred Box {i}: center=({bbox[0]:.1f}, {bbox[1]:.1f}, {bbox[2]:.1f}), score={score:.2f}")
                     img = draw_3d_bbox_on_image(img, bbox, current_intrinsic, current_extrinsic, 
-                                              color=(0, 0, 255), thickness=3)  # Red for predictions
+                                              color=(0, 255, 0), thickness=3)  # Green for predictions
         
         # Save image with camera name in filename (no text overlays, just pure image with 3D bboxes)
         filename = f'{sample_id}_{camera_name}.jpg'

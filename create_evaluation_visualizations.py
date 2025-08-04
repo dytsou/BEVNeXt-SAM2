@@ -320,8 +320,8 @@ def create_sample_visualizations(output_dir):
             w, h = np.random.randint(40, 120), np.random.randint(30, 80)
             
             # Draw bounding box
-            cv2.rectangle(img, (x1, y1), (x1+w, y1+h), (1, 0, 0), 2)  # Red for predictions
-            cv2.rectangle(img, (x1-2, y1-2), (x1+w+2, y1+h+2), (0, 1, 0), 1)  # Green for GT
+            cv2.rectangle(img, (x1, y1), (x1+w, y1+h), (0, 1, 0), 2)  # Green for predictions
+            cv2.rectangle(img, (x1-2, y1-2), (x1+w+2, y1+h+2), (1, 0, 0), 1)  # Red for GT
             
         ax.imshow(img)
         ax.set_title(f'Sample {i+1}: Multi-Camera View with Detections', fontweight='bold')
@@ -330,8 +330,8 @@ def create_sample_visualizations(output_dir):
         # Add legend for first subplot
         if i == 0:
             from matplotlib.patches import Patch
-            legend_elements = [Patch(facecolor='red', label='Predicted Boxes'),
-                             Patch(facecolor='green', label='Ground Truth')]
+            legend_elements = [Patch(facecolor='green', label='Predicted Boxes'),
+                             Patch(facecolor='red', label='Ground Truth')]
             ax.legend(handles=legend_elements, loc='upper right')
     
     plt.tight_layout()
