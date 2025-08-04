@@ -507,62 +507,139 @@ class EnhancedBEVNeXtSAM2Model(nn.Module):
             return torch.randn_like(bev_features)
 
     def _extract_sam2_features_from_cameras(self, camera_images: torch.Tensor, target_shape: tuple) -> torch.Tensor:
-        """Extract SAM2 features from camera images"""
+        """Extract SAM2 features from camera images using batch processing"""
+        start_time = time.time()
         B, N_cams, C, H, W = camera_images.shape
         target_B, target_C, target_H, target_W = target_shape
+        
+        logger.info(f"Starting batch SAM2 feature extraction for {B} batches, {N_cams} cameras each")
 
-        # Process each camera image to extract SAM2 features
-        sam2_features_list = []
-
-        for b in range(B):
-            batch_features = []
-
-            for cam in range(N_cams):
-                # Get single camera image [C, H, W]
-                cam_image = camera_images[b, cam]  # [C, H, W]
-
-                # Convert to numpy format for SAM2 (H, W, C) with values [0, 255]
-                cam_image_np = cam_image.permute(1, 2, 0).cpu().numpy()  # [H, W, C]
-                cam_image_np = (cam_image_np * 255).astype(np.uint8)
-
-                # Set image in SAM2 predictor and extract features
-                with torch.no_grad():
-                    self.sam2_predictor.set_image(cam_image_np)
-                    # Get image embeddings from SAM2
-                    sam2_embed = self.sam2_predictor.get_image_embedding()  # [1, C_sam2, H_sam2, W_sam2]
-
-                    # Resize to target spatial dimensions if needed
-                    if sam2_embed.shape[-2:] != (target_H, target_W):
-                        sam2_embed = F.interpolate(
-                            sam2_embed,
-                            size=(target_H, target_W),
-                            mode='bilinear',
-                            align_corners=False
-                        )
-
-                    batch_features.append(sam2_embed.squeeze(0))  # Remove batch dim: [C_sam2, H, W]
-
-            # Average features across cameras
-            avg_features = torch.stack(batch_features).mean(dim=0)  # [C_sam2, H, W]
-
-            # Project to target channel dimension
-            if avg_features.shape[0] != target_C:
-                # Use a simple projection layer
+        try:
+            # Reshape all camera images into a single batch: [B*N_cams, C, H, W]
+            batch_images = camera_images.reshape(B * N_cams, C, H, W)
+            
+            # Convert batch to numpy format for SAM2 processing
+            # SAM2 expects images in [H, W, C] format with values [0, 255]
+            batch_images_np = batch_images.permute(0, 2, 3, 1).cpu().numpy()  # [B*N_cams, H, W, C]
+            batch_images_np = (batch_images_np * 255).astype(np.uint8)
+            
+            # Process all images in batch
+            sam2_embeddings = []
+            
+            with torch.no_grad():
+                # Process images in smaller sub-batches if needed to avoid memory issues
+                sub_batch_size = 16  # Process 16 images at a time
+                
+                for i in range(0, B * N_cams, sub_batch_size):
+                    end_idx = min(i + sub_batch_size, B * N_cams)
+                    sub_batch = batch_images_np[i:end_idx]
+                    
+                    # Process sub-batch
+                    sub_embeddings = []
+                    for img in sub_batch:
+                        self.sam2_predictor.set_image(img)
+                        embed = self.sam2_predictor.get_image_embedding()
+                        sub_embeddings.append(embed)
+                    
+                    sam2_embeddings.extend(sub_embeddings)
+            
+            # Stack all embeddings: [B*N_cams, 1, C_sam2, H_sam2, W_sam2]
+            sam2_embeddings = torch.cat(sam2_embeddings, dim=0)
+            
+            # Resize to target spatial dimensions if needed
+            if sam2_embeddings.shape[-2:] != (target_H, target_W):
+                sam2_embeddings = F.interpolate(
+                    sam2_embeddings,
+                    size=(target_H, target_W),
+                    mode='bilinear',
+                    align_corners=False
+                )
+            
+            # Remove the extra batch dimension: [B*N_cams, C_sam2, H_sam2, W_sam2]
+            sam2_embeddings = sam2_embeddings.squeeze(1)
+            
+            # Reshape back to [B, N_cams, C_sam2, H_sam2, W_sam2]
+            C_sam2 = sam2_embeddings.shape[1]
+            sam2_embeddings = sam2_embeddings.reshape(B, N_cams, C_sam2, target_H, target_W)
+            
+            # Average features across cameras: [B, C_sam2, H_sam2, W_sam2]
+            avg_features = sam2_embeddings.mean(dim=1)
+            
+            # Project to target channel dimension if needed
+            if avg_features.shape[1] != target_C:
+                # Initialize projection layer if not exists
                 if not hasattr(self, 'sam2_channel_proj'):
                     self.sam2_channel_proj = nn.Conv2d(
-                        avg_features.shape[0],
+                        avg_features.shape[1],
                         target_C,
                         kernel_size=1
                     ).to(avg_features.device)
-
-                avg_features = self.sam2_channel_proj(avg_features.unsqueeze(0)).squeeze(0)
-
-            sam2_features_list.append(avg_features)
-
-        # Stack batch dimension
-        sam2_features = torch.stack(sam2_features_list)  # [B, target_C, target_H, target_W]
-
-        return sam2_features
+                
+                avg_features = self.sam2_channel_proj(avg_features)
+            
+            end_time = time.time()
+            logger.info(f"Batch SAM2 feature extraction completed in {end_time - start_time:.2f} seconds")
+            
+            return avg_features
+            
+        except Exception as e:
+            logger.warning(f"Batch processing failed: {e}. Falling back to sequential processing.")
+            
+            # Fallback to original sequential processing
+            sam2_features_list = []
+            
+            for b in range(B):
+                batch_features = []
+                
+                for cam in range(N_cams):
+                    # Get single camera image [C, H, W]
+                    cam_image = camera_images[b, cam]  # [C, H, W]
+                    
+                    # Convert to numpy format for SAM2 (H, W, C) with values [0, 255]
+                    cam_image_np = cam_image.permute(1, 2, 0).cpu().numpy()  # [H, W, C]
+                    cam_image_np = (cam_image_np * 255).astype(np.uint8)
+                    
+                    # Set image in SAM2 predictor and extract features
+                    with torch.no_grad():
+                        self.sam2_predictor.set_image(cam_image_np)
+                        # Get image embeddings from SAM2
+                        sam2_embed = self.sam2_predictor.get_image_embedding()  # [1, C_sam2, H_sam2, W_sam2]
+                        
+                        # Resize to target spatial dimensions if needed
+                        if sam2_embed.shape[-2:] != (target_H, target_W):
+                            sam2_embed = F.interpolate(
+                                sam2_embed,
+                                size=(target_H, target_W),
+                                mode='bilinear',
+                                align_corners=False
+                            )
+                        
+                        batch_features.append(sam2_embed.squeeze(0))  # Remove batch dim: [C_sam2, H, W]
+                
+                # Average features across cameras
+                avg_features = torch.stack(batch_features).mean(dim=0)  # [C_sam2, H, W]
+                
+                # Project to target channel dimension
+                if avg_features.shape[0] != target_C:
+                    # Use a simple projection layer
+                    if not hasattr(self, 'sam2_channel_proj'):
+                        self.sam2_channel_proj = nn.Conv2d(
+                            avg_features.shape[0],
+                            target_C,
+                            kernel_size=1
+                        ).to(avg_features.device)
+                    
+                    avg_features = self.sam2_channel_proj(avg_features.unsqueeze(0)).squeeze(0)
+                
+                sam2_features_list.append(avg_features)
+            
+            # Stack batch dimension
+            sam2_features = torch.stack(sam2_features_list)  # [B, target_C, target_H, target_W]
+            
+            end_time = time.time()
+            logger.info(f"Sequential SAM2 feature extraction completed in {end_time - start_time:.2f} seconds")
+            
+            return sam2_features
 
     def _fuse_features(self, bev_features: torch.Tensor, sam2_features: torch.Tensor) -> torch.Tensor:
         """Fuse BEV and SAM2 features"""
@@ -911,6 +988,11 @@ class NuScenesTrainer:
         if not NUSCENES_AVAILABLE:
             raise RuntimeError("nuScenes dataset module not available")
 
+        # Auto-calculate optimal number of workers based on CPU cores
+        cpu_count = os.cpu_count() or 1
+        num_workers = min(cpu_count, 16)  # Cap at 16 to avoid diminishing returns
+        logger.info(f"Detected {cpu_count} CPU cores, using {num_workers} workers for DataLoader")
+
         # Create nuScenes configuration
         nuscenes_config = NuScenesConfig(
             data_root=self.config['data_root'],
@@ -924,13 +1006,16 @@ class NuScenesTrainer:
             use_augmentation=self.config.get('use_augmentation', True) and split == 'train'
         )
 
-        # Create basic dataloader
+        # Create optimized dataloader with enhanced parameters
         loader = create_nuscenes_dataloader(
             config=nuscenes_config,
             split=split,
             batch_size=self.config['batch_size'],
-            num_workers=self.config['num_workers'],
-            shuffle=(split == 'train')
+            num_workers=num_workers,
+            shuffle=(split == 'train'),
+            pin_memory=True,
+            persistent_workers=True,
+            prefetch_factor=4
         )
         
         # Optimize for multi-GPU if needed

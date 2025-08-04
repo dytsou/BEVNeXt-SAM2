@@ -657,7 +657,9 @@ def create_nuscenes_dataloader(
     batch_size: int = 1,
     num_workers: int = 2,
     shuffle: bool = True,
-    pin_memory: bool = True
+    pin_memory: bool = True,
+    persistent_workers: bool = True,
+    prefetch_factor: int = 4
 ) -> DataLoader:
     """
     Create a DataLoader for nuScenes multi-modal dataset
@@ -706,6 +708,8 @@ def create_nuscenes_dataloader(
         shuffle=shuffle,
         num_workers=num_workers,
         pin_memory=pin_memory,
+        persistent_workers=persistent_workers and num_workers > 0,
+        prefetch_factor=prefetch_factor if num_workers > 0 else None,
         collate_fn=collate_fn
     )
 
