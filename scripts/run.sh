@@ -41,6 +41,7 @@ print_help() {
     echo ""
     echo "Training Pipeline:"
     echo "  train              - Start training with volume-mounted dataset"
+    echo "  train-multi-gpu    - Start multi-GPU training with volume-mounted dataset"
     echo "  train-download     - Start training with automatic dataset download"
     echo "  train-s3           - Start training with S3 dataset streaming"
     echo ""
@@ -68,6 +69,7 @@ print_help() {
     echo "Examples:"
     echo "  $0 build-fast --gpu"
     echo "  $0 train --data-path /data/nuscenes --gpu --epochs 50"
+    echo "  $0 train-multi-gpu --data-path /data/nuscenes --gpu --epochs 50"
     echo "  $0 validate --checkpoint outputs/checkpoints/latest.pth --gpu"
     echo "  $0 dev --data-path /data/nuscenes --gpu --jupyter"
 }
@@ -112,7 +114,7 @@ EXTRA_PORTS=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        build-container|build-fast|build-full|train|train-download|train-s3|validate|validate-nuscenes|test-model|dev|demo|shell)
+        build-container|build-fast|build-full|train|train-multi-gpu|train-download|train-s3|validate|validate-nuscenes|test-model|dev|demo|shell)
             MODE="$1"
             shift
             ;;
@@ -286,6 +288,62 @@ case $MODE in
             echo "$DOCKER_CMD bash -c \"$TRAIN_CMD\""
         else
             echo -e "${GREEN}🚀 Starting training...${NC}"
+            eval "$DOCKER_CMD bash -c \"$TRAIN_CMD\""
+        fi
+        ;;
+        
+    train-multi-gpu)
+        echo -e "${GREEN}Starting BEVNeXt-SAM2 multi-GPU training with nuScenes dataset...${NC}"
+        echo -e "${BLUE}Dataset path: $DATA_PATH${NC}"
+        
+        if [[ ! -d "$DATA_PATH" ]]; then
+            echo -e "${RED}Error: Dataset path does not exist: $DATA_PATH${NC}"
+            echo -e "${YELLOW}Please ensure the nuScenes dataset is available at this location${NC}"
+            exit 1
+        fi
+        
+        # Check GPU availability for multi-GPU
+        if [[ "$USE_GPU" == true ]]; then
+            AVAILABLE_GPUS=$(nvidia-smi --query-gpu=index --format=csv,noheader | wc -l)
+            if [[ "$AVAILABLE_GPUS" -lt 2 ]]; then
+                echo -e "${RED}Error: Multi-GPU training requires at least 2 GPUs, but only $AVAILABLE_GPUS available${NC}"
+                exit 1
+            fi
+            echo -e "${GREEN}Detected $AVAILABLE_GPUS GPUs for multi-GPU training${NC}"
+        fi
+        
+        remove_container "$CONTAINER_NAME"
+        
+        # Build multi-GPU training command
+        TRAIN_CMD="python training/train_bevnext_sam2_nuscenes.py --data-root /workspace/data/nuscenes"
+        
+        # Add multi-GPU arguments
+        TRAIN_CMD="$TRAIN_CMD --gpus 0,1"
+        TRAIN_CMD="$TRAIN_CMD --distributed"
+        
+        if [[ -n "$TRAINING_CONFIG" ]]; then
+            TRAIN_CMD="$TRAIN_CMD --config $TRAINING_CONFIG"
+        fi
+        
+        if [[ -n "$NUM_EPOCHS" ]]; then
+            TRAIN_CMD="$TRAIN_CMD --epochs $NUM_EPOCHS"
+        fi
+        
+        if [[ -n "$BATCH_SIZE" ]]; then
+            TRAIN_CMD="$TRAIN_CMD --batch-size $BATCH_SIZE"
+        fi
+        
+        TRAIN_CMD="$TRAIN_CMD --mixed-precision"
+        TRAIN_CMD="$TRAIN_CMD --lr-scaling linear"
+        
+        DOCKER_CMD=$(build_docker_cmd)
+        DOCKER_CMD="$DOCKER_CMD $IMAGE_NAME"
+        
+        if [[ "$DRY_RUN" == true ]]; then
+            echo "$DOCKER_CMD bash -c \"$TRAIN_CMD\""
+        else
+            echo -e "${GREEN}🚀 Starting multi-GPU training...${NC}"
+            echo -e "${CYAN}Using 2 GPUs with DistributedDataParallel${NC}"
             eval "$DOCKER_CMD bash -c \"$TRAIN_CMD\""
         fi
         ;;
