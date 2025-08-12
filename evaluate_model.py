@@ -295,7 +295,7 @@ def save_sample_visualizations(sample, prediction, ground_truth, output_dir, sam
         # Get camera name for this view
         camera_name = camera_names[cam_idx] if cam_idx < len(camera_names) else f'Camera_{cam_idx}'
         
-        # Draw ground truth bounding boxes (green)
+        # Draw ground truth bounding boxes (red)
         if 'gt_boxes' in ground_truth and len(ground_truth['gt_boxes']) > 0:
             gt_boxes = ground_truth['gt_boxes'].numpy() if torch.is_tensor(ground_truth['gt_boxes']) else ground_truth['gt_boxes']
             print(f"Drawing {len(gt_boxes)} ground truth boxes for {camera_name}")
@@ -304,7 +304,7 @@ def save_sample_visualizations(sample, prediction, ground_truth, output_dir, sam
                 img = draw_3d_bbox_on_image(img, bbox, current_intrinsic, current_extrinsic, 
                                           color=(0, 0, 255), thickness=3)  # Red for GT
         
-        # Draw predicted bounding boxes (red)
+        # Draw predicted bounding boxes (green)
         if 'boxes_3d' in prediction and len(prediction['boxes_3d']) > 0:
             pred_boxes = prediction['boxes_3d'].numpy() if torch.is_tensor(prediction['boxes_3d']) else prediction['boxes_3d']
             scores = prediction['scores'].numpy() if torch.is_tensor(prediction['scores']) else prediction['scores']
