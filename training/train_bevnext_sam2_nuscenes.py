@@ -361,7 +361,12 @@ class EnhancedBEVNeXtSAM2Model(nn.Module):
         self._current_batch = batch
 
         B = batch['camera_images'].shape[0] if 'camera_images' in batch else batch['gt_boxes'].shape[0]
-        device = next(self.parameters()).device
+        # Derive device from input tensors to be robust under DataParallel replicas
+        if 'camera_images' in batch and isinstance(batch['camera_images'], torch.Tensor):
+            device = batch['camera_images'].device
+        else:
+            # Find the first tensor in batch to infer device
+            device = next((v.device for v in batch.values() if isinstance(v, torch.Tensor)), torch.device('cpu'))
 
         # Process multi-camera features
         if 'camera_images' in batch:
@@ -422,7 +427,14 @@ class EnhancedBEVNeXtSAM2Model(nn.Module):
     def _process_lidar_features(self, lidar_points: List[torch.Tensor]) -> torch.Tensor:
         """Process LiDAR point clouds"""
         B = len(lidar_points)
-        device = next(self.parameters()).device
+        # Infer device from first non-empty tensor in lidar_points or default to CPU
+        device = None
+        for pts in lidar_points:
+            if isinstance(pts, torch.Tensor):
+                device = pts.device
+                break
+        if device is None:
+            device = torch.device('cpu')
 
         lidar_features = []
         for points in lidar_points:
@@ -446,7 +458,14 @@ class EnhancedBEVNeXtSAM2Model(nn.Module):
     def _process_radar_features(self, radar_points: List[torch.Tensor]) -> torch.Tensor:
         """Process radar point clouds"""
         B = len(radar_points)
-        device = next(self.parameters()).device
+        # Infer device from first non-empty tensor in radar_points or default to CPU
+        device = None
+        for pts in radar_points:
+            if isinstance(pts, torch.Tensor):
+                device = pts.device
+                break
+        if device is None:
+            device = torch.device('cpu')
 
         radar_features = []
         for points in radar_points:
@@ -825,7 +844,9 @@ class NuScenesTrainer:
         except Exception as e:
             logger.warning(f"Failed to setup custom optimizer: {e}")
             logger.info("Using default Adam optimizer")
-            self.optimizer = optim.Adam(self.model.parameters(), lr=scaled_lr)
+            # Access underlying module if wrapped with DataParallel/DistributedDataParallel
+            base_model = self.model.module if hasattr(self.model, 'module') else self.model
+            self.optimizer = optim.Adam(base_model.parameters(), lr=scaled_lr)
 
         # Setup mixed precision scaler
         if self.use_mixed_precision:
@@ -937,11 +958,13 @@ class NuScenesTrainer:
 
         # Backbone parameters (lower learning rate)
         backbone_params = []
-        backbone_params.extend(self.model.camera_backbone.parameters())
-        if hasattr(self.model, 'lidar_backbone'):
-            backbone_params.extend(self.model.lidar_backbone.parameters())
-        if hasattr(self.model, 'radar_backbone'):
-            backbone_params.extend(self.model.radar_backbone.parameters())
+        # Access underlying module if wrapped
+        base_model = self.model.module if hasattr(self.model, 'module') else self.model
+        backbone_params.extend(base_model.camera_backbone.parameters())
+        if hasattr(base_model, 'lidar_backbone'):
+            backbone_params.extend(base_model.lidar_backbone.parameters())
+        if hasattr(base_model, 'radar_backbone'):
+            backbone_params.extend(base_model.radar_backbone.parameters())
 
         param_groups.append({
             'params': backbone_params,
@@ -951,15 +974,15 @@ class NuScenesTrainer:
 
         # Transformer parameters (medium learning rate)
         param_groups.append({
-            'params': self.model.bev_transformer.parameters(),
+            'params': base_model.bev_transformer.parameters(),
             'lr': base_lr * 0.5,
             'name': 'transformer'
         })
 
         # Head parameters (full learning rate)
         head_params = []
-        head_params.extend(self.model.sam2_fusion.parameters())
-        head_params.extend(self.model.detection_head.parameters())
+        head_params.extend(base_model.sam2_fusion.parameters())
+        head_params.extend(base_model.detection_head.parameters())
 
         param_groups.append({
             'params': head_params,
