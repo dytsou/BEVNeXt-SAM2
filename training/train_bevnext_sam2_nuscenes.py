@@ -1108,7 +1108,8 @@ class NuScenesTrainer:
             if self.use_mixed_precision:
                 with torch.cuda.amp.autocast():
                     predictions = self.model(batch)
-                    losses = self.model.compute_loss(predictions, batch)
+                    base_model = self.model.module if hasattr(self.model, 'module') else self.model
+                    losses = base_model.compute_loss(predictions, batch)
 
                 # Backward pass with gradient scaling
                 self.scaler.scale(losses['total']).backward()
@@ -1122,7 +1123,8 @@ class NuScenesTrainer:
                 self.scaler.update()
             else:
                 predictions = self.model(batch)
-                losses = self.model.compute_loss(predictions, batch)
+                base_model = self.model.module if hasattr(self.model, 'module') else self.model
+                losses = base_model.compute_loss(predictions, batch)
 
                 losses['total'].backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
@@ -1180,10 +1182,12 @@ class NuScenesTrainer:
                 if self.use_mixed_precision:
                     with torch.cuda.amp.autocast():
                         predictions = self.model(batch)
-                        losses = self.model.compute_loss(predictions, batch)
+                        base_model = self.model.module if hasattr(self.model, 'module') else self.model
+                        losses = base_model.compute_loss(predictions, batch)
                 else:
                     predictions = self.model(batch)
-                    losses = self.model.compute_loss(predictions, batch)
+                    base_model = self.model.module if hasattr(self.model, 'module') else self.model
+                    losses = base_model.compute_loss(predictions, batch)
 
                 # Accumulate losses
                 for key, value in losses.items():
