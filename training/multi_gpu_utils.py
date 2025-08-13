@@ -300,6 +300,9 @@ def optimize_dataloader_for_multigpu(
     distributed_sampler = wrapper.create_distributed_sampler(dataloader.dataset)
     
     # Create new DataLoader with optimized settings
+    # Preserve the original collate_fn to avoid default_collate issues with variable-sized fields
+    original_collate = getattr(dataloader, 'collate_fn', None)
+
     optimized_loader = DataLoader(
         dataset=dataloader.dataset,
         batch_size=dataloader.batch_size,
@@ -308,7 +311,8 @@ def optimize_dataloader_for_multigpu(
         num_workers=optimal_workers,
         pin_memory=True,
         persistent_workers=True if optimal_workers > 0 else False,
-        drop_last=True  # Important for distributed training
+        drop_last=True,
+        collate_fn=original_collate
     )
     
     logger.info(f"DataLoader optimized for multi-GPU:")
