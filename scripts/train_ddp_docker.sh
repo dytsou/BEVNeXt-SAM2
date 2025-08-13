@@ -161,7 +161,6 @@ DOCKER_CMD=(
   --gpus "device=$GPU_IDS"
   --shm-size=8g
   --ulimit memlock=-1 --ulimit stack=67108864
-  -e NVIDIA_VISIBLE_DEVICES="$GPU_IDS"
   -e NUSCENES_DATA_ROOT=/workspace/data/nuscenes
   -e PYTHONPATH=/workspace/bevnext-sam2
   -v "$ABS_PROJECT_PATH":/workspace/bevnext-sam2
