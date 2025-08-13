@@ -563,11 +563,13 @@ class NuScenesMultiModalDataset(Dataset):
         """Load 3D bounding box annotations for a sample"""
         annotation_tokens = self.token_manager.sample_to_annotations.get(sample_token, [])
         
+        # Always return fixed-sized targets to ensure batch stacking works
+        max_objects = self.config.num_queries
         if not annotation_tokens:
             return {
-                'gt_boxes': torch.zeros(0, 10),
-                'gt_labels': torch.zeros(0, dtype=torch.long),
-                'gt_valid': torch.zeros(0, dtype=torch.bool)
+                'gt_boxes': torch.zeros(max_objects, 10, dtype=torch.float32),
+                'gt_labels': torch.zeros(max_objects, dtype=torch.long),
+                'gt_valid': torch.zeros(max_objects, dtype=torch.bool)
             }
         
         boxes = []
@@ -611,7 +613,6 @@ class NuScenesMultiModalDataset(Dataset):
         
         # Pad or truncate to num_queries
         num_objects = len(boxes)
-        max_objects = self.config.num_queries
         
         gt_boxes = torch.zeros(max_objects, 10, dtype=torch.float32)
         gt_labels = torch.zeros(max_objects, dtype=torch.long)
