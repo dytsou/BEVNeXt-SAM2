@@ -806,8 +806,8 @@ class NuScenesTrainer:
         distributed: bool = False,
         gradient_accumulation: int = 1,
         lr_scaling: str = 'linear',
-        # Enhanced checkpoint and resume options
-        auto_resume: bool = True,
+        # Enhanced checkpoint and resume options (optional)
+        auto_resume: bool = False,
         checkpoint_freq: int = 100,
         no_resume_prompt: bool = False,
         checkpoint_validation: bool = True,
@@ -817,13 +817,16 @@ class NuScenesTrainer:
         self.use_mixed_precision = use_mixed_precision and torch.cuda.is_available()
         self.gradient_accumulation = gradient_accumulation
         
-        # Enhanced checkpoint settings
-        self.auto_resume = auto_resume
-        self.checkpoint_freq = checkpoint_freq
-        self.no_resume_prompt = no_resume_prompt
-        self.checkpoint_validation = checkpoint_validation
-        self.resume_from = resume_from
-
+        # Enhanced checkpoint settings (only when enabled)
+        self.enhanced_checkpoints = any([auto_resume, resume_from, checkpoint_freq != 100, no_resume_prompt])
+        
+        if self.enhanced_checkpoints:
+            self.auto_resume = auto_resume
+            self.checkpoint_freq = checkpoint_freq
+            self.no_resume_prompt = no_resume_prompt
+            self.checkpoint_validation = checkpoint_validation
+            self.resume_from = resume_from
+        
         # Setup multi-GPU wrapper
         self.gpu_wrapper = MultiGPUWrapper(
             gpu_ids=gpu_ids,
@@ -850,36 +853,46 @@ class NuScenesTrainer:
         self.output_dir = Path(config['output_dir'])
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Enhanced checkpoint manager
-        self.checkpoint_manager = create_checkpoint_manager(
-            checkpoint_dir=self.output_dir / 'checkpoints',
-            keep_latest=5,
-            keep_best=3,
-            enable_compression=True,
-            async_save=True,
-            max_disk_usage_gb=20.0
-        )
-        
-        # Auto-resume manager  
-        self.auto_resume_manager = create_auto_resume_manager(
-            checkpoint_manager=self.checkpoint_manager,
-            interactive=not self.no_resume_prompt,
-            auto_resume_threshold_hours=24.0,
-            min_epochs_for_auto_resume=1
-        )
-        
-        # Network error handler
-        self.network_error_handler = create_network_error_handler(
-            max_retries=10,
-            base_delay=1.0,
-            enable_monitoring=True,
-            log_file=self.output_dir / 'network_errors.log',
-            emergency_callback=self._emergency_callback
-        )
-        
-        if self.gpu_wrapper.is_main_process():
-            logger.info(f"Enhanced checkpoint management enabled: {self.output_dir / 'checkpoints'}")
-            logger.info(f"Auto-resume: {auto_resume}, Checkpoint frequency: {checkpoint_freq} batches")
+        # Enhanced checkpoint manager (only if enhanced features enabled)
+        if self.enhanced_checkpoints:
+            try:
+                self.checkpoint_manager = create_checkpoint_manager(
+                    checkpoint_dir=self.output_dir / 'checkpoints',
+                    keep_latest=5,
+                    keep_best=3,
+                    enable_compression=True,
+                    async_save=True,
+                    max_disk_usage_gb=20.0
+                )
+                
+                # Auto-resume manager  
+                self.auto_resume_manager = create_auto_resume_manager(
+                    checkpoint_manager=self.checkpoint_manager,
+                    interactive=not self.no_resume_prompt,
+                    auto_resume_threshold_hours=24.0,
+                    min_epochs_for_auto_resume=1
+                )
+                
+                # Network error handler
+                self.network_error_handler = create_network_error_handler(
+                    max_retries=10,
+                    base_delay=1.0,
+                    enable_monitoring=True,
+                    log_file=self.output_dir / 'network_errors.log',
+                    emergency_callback=self._emergency_callback
+                )
+                
+                if self.gpu_wrapper.is_main_process():
+                    logger.info(f"🔄 Enhanced checkpoint management enabled: {self.output_dir / 'checkpoints'}")
+                    logger.info(f"Auto-resume: {auto_resume}, Checkpoint frequency: {checkpoint_freq} batches")
+            except Exception as e:
+                logger.warning(f"Failed to initialize enhanced checkpoint system: {e}")
+                logger.info("Falling back to standard checkpoint system")
+                self.enhanced_checkpoints = False
+        else:
+            self.checkpoint_manager = None
+            self.auto_resume_manager = None  
+            self.network_error_handler = None
 
         # Setup model
         model = EnhancedBEVNeXtSAM2Model(config)
@@ -949,8 +962,9 @@ class NuScenesTrainer:
             self.logger = logging.getLogger(__name__)
             self.writer = None
             
-        # Check for auto-resume opportunity
-        self._check_and_handle_auto_resume()
+        # Check for auto-resume opportunity (only if enhanced features enabled)
+        if self.enhanced_checkpoints:
+            self._check_and_handle_auto_resume()
         
         # Log setup information
         if self.gpu_wrapper.is_main_process():
@@ -1299,38 +1313,42 @@ class NuScenesTrainer:
         return metrics
 
     def save_checkpoint(self, is_best: bool = False, is_emergency: bool = False):
-        """Save model checkpoint using enhanced checkpoint manager"""
+        """Save model checkpoint using enhanced or standard checkpoint system"""
         if not self.gpu_wrapper.is_main_process():
             return  # Only main process saves checkpoints
             
-        try:
-            # Get current training metrics
-            current_metrics = {}
-            if hasattr(self, 'last_train_metrics'):
-                current_metrics.update(self.last_train_metrics)
-            if hasattr(self, 'last_val_metrics'):
-                current_metrics.update({f'val_{k}': v for k, v in self.last_val_metrics.items()})
-            
-            # Use enhanced checkpoint manager
-            checkpoint_path = self.checkpoint_manager.save_checkpoint(
-                model_state=self.model.state_dict(),
-                optimizer_state=self.optimizer.state_dict(),
-                scheduler_state=self.scheduler.state_dict(),
-                epoch=self.epoch,
-                step=self.batch_step,
-                metrics=current_metrics,
-                model_config=self.config,
-                is_best=is_best,
-                is_emergency=is_emergency,
-                blocking=is_emergency  # Emergency saves are always synchronous
-            )
-            
-            if checkpoint_path:
-                logger.info(f"Enhanced checkpoint saved: {checkpoint_path}")
+        if self.enhanced_checkpoints and self.checkpoint_manager:
+            try:
+                # Get current training metrics
+                current_metrics = {}
+                if hasattr(self, 'last_train_metrics'):
+                    current_metrics.update(self.last_train_metrics)
+                if hasattr(self, 'last_val_metrics'):
+                    current_metrics.update({f'val_{k}': v for k, v in self.last_val_metrics.items()})
                 
-        except Exception as e:
-            logger.error(f"Enhanced checkpoint save failed: {e}")
-            # Fallback to basic checkpoint save
+                # Use enhanced checkpoint manager
+                checkpoint_path = self.checkpoint_manager.save_checkpoint(
+                    model_state=self.model.state_dict(),
+                    optimizer_state=self.optimizer.state_dict(),
+                    scheduler_state=self.scheduler.state_dict(),
+                    epoch=self.epoch,
+                    step=getattr(self, 'batch_step', 0),
+                    metrics=current_metrics,
+                    model_config=self.config,
+                    is_best=is_best,
+                    is_emergency=is_emergency,
+                    blocking=is_emergency  # Emergency saves are always synchronous
+                )
+                
+                if checkpoint_path:
+                    logger.info(f"🔄 Enhanced checkpoint saved: {checkpoint_path}")
+                    
+            except Exception as e:
+                logger.error(f"Enhanced checkpoint save failed: {e}")
+                # Fallback to basic checkpoint save
+                self._fallback_checkpoint_save(is_best, is_emergency)
+        else:
+            # Use standard checkpoint saving (backward compatible)
             self._fallback_checkpoint_save(is_best, is_emergency)
     
     def _fallback_checkpoint_save(self, is_best: bool = False, is_emergency: bool = False):
@@ -1424,15 +1442,19 @@ class NuScenesTrainer:
             for epoch in range(self.epoch, self.config['num_epochs']):
                 self.epoch = epoch
 
-                # Enhanced train epoch with checkpointing
-                train_metrics = self._train_epoch_enhanced()
+                # Train epoch (enhanced or standard based on configuration)
+                if self.enhanced_checkpoints:
+                    train_metrics = self._train_epoch_enhanced()
+                else:
+                    train_metrics = self.train_epoch()
 
                 # Validate
                 val_metrics = self.validate()
                 
-                # Store metrics for checkpointing
-                self.last_train_metrics = train_metrics
-                self.last_val_metrics = val_metrics
+                # Store metrics for checkpointing (only if enhanced features enabled)
+                if self.enhanced_checkpoints:
+                    self.last_train_metrics = train_metrics
+                    self.last_val_metrics = val_metrics
 
                 # Log epoch results
                 logger.info(
@@ -1468,12 +1490,15 @@ class NuScenesTrainer:
                 
         except Exception as e:
             logger.error(f"Training interrupted with error: {e}")
-            # Emergency checkpoint save
-            self.save_checkpoint(is_emergency=True)
+            # Emergency checkpoint save (only if enhanced features enabled)
+            if self.enhanced_checkpoints:
+                self.save_checkpoint(is_emergency=True)
+            else:
+                self.save_checkpoint()
             raise
         finally:
-            # Wait for any pending async checkpoint saves
-            if hasattr(self.checkpoint_manager, 'wait_for_pending_saves'):
+            # Wait for any pending async checkpoint saves (only if enhanced features enabled)
+            if self.enhanced_checkpoints and hasattr(self.checkpoint_manager, 'wait_for_pending_saves'):
                 self.checkpoint_manager.wait_for_pending_saves()
 
         logger.info("Training completed!")
@@ -1496,8 +1521,11 @@ class NuScenesTrainer:
             try:
                 self.batch_step = batch_idx
                 
-                # Enhanced training step with network error handling
-                losses, predictions = self._enhanced_training_step_with_checkpointing(batch, batch_idx)
+                # Training step (enhanced or standard based on configuration)
+                if self.enhanced_checkpoints:
+                    losses, predictions = self._enhanced_training_step_with_checkpointing(batch, batch_idx)
+                else:
+                    losses, predictions = self._standard_training_step(batch, batch_idx)
                 
                 # Accumulate losses
                 for key, value in losses.items():
@@ -1512,8 +1540,8 @@ class NuScenesTrainer:
                 if self.gpu_wrapper.is_main_process():
                     pbar.set_postfix({'loss': f"{losses['total'].item():.4f}"})
                 
-                # Sub-epoch checkpoint saving
-                if self._should_save_checkpoint(batch_idx):
+                # Sub-epoch checkpoint saving (only if enhanced features enabled)
+                if self.enhanced_checkpoints and self._should_save_checkpoint(batch_idx):
                     if self.gpu_wrapper.is_main_process():
                         logger.info(f"Saving sub-epoch checkpoint at batch {batch_idx}")
                         self.save_checkpoint(is_best=False)
@@ -1521,17 +1549,18 @@ class NuScenesTrainer:
             except Exception as e:
                 logger.error(f"Error in training step {batch_idx}: {e}")
                 
-                # Check if this is a network error
-                error_type, _ = self.network_error_handler._classify_error(e)
-                if 'connection' in error_type.value or 'network' in str(e).lower():
-                    logger.warning("Network error detected, attempting recovery...")
-                    # Emergency checkpoint
-                    self.save_checkpoint(is_emergency=True)
-                    # Let network error handler decide if we should retry
-                    raise
-                else:
-                    # Non-network error, re-raise immediately
-                    raise
+                # Check if this is a network error (only if enhanced features enabled)
+                if self.enhanced_checkpoints and self.network_error_handler:
+                    error_type, _ = self.network_error_handler._classify_error(e)
+                    if 'connection' in error_type.value or 'network' in str(e).lower():
+                        logger.warning("Network error detected, attempting recovery...")
+                        # Emergency checkpoint
+                        self.save_checkpoint(is_emergency=True)
+                        # Let network error handler decide if we should retry
+                        raise
+                
+                # Re-raise the error
+                raise
 
         # Average metrics
         num_batches = len(self.train_loader)
@@ -1578,17 +1607,63 @@ class NuScenesTrainer:
             
             return losses, predictions
         
-        # Use network error handler for resilient training
-        try:
-            return self.network_error_handler.handle_error(
-                None,
-                f"training_step_epoch_{self.epoch}_batch_{batch_idx}",
-                training_operation
-            )
-        except Exception as e:
-            # If network error handler fails, try once more directly
-            logger.warning(f"Network error handler failed, attempting direct execution: {e}")
+        # Use network error handler for resilient training (if available)
+        if self.network_error_handler:
+            try:
+                return self.network_error_handler.handle_error(
+                    None,
+                    f"training_step_epoch_{self.epoch}_batch_{batch_idx}",
+                    training_operation
+                )
+            except Exception as e:
+                # If network error handler fails, try once more directly
+                logger.warning(f"Network error handler failed, attempting direct execution: {e}")
+                return training_operation()
+        else:
+            # No network error handler, execute directly
             return training_operation()
+    
+    def _standard_training_step(self, batch, batch_idx):
+        """Standard training step without enhanced network error handling"""
+        # Move batch to device
+        batch_on_device = self._move_batch_to_device(batch)
+        
+        # Forward and backward pass
+        if self.use_mixed_precision:
+            with torch.cuda.amp.autocast():
+                predictions = self.model(batch_on_device)
+                base_model = self.model.module if hasattr(self.model, 'module') else self.model
+                losses = base_model.compute_loss(predictions, batch_on_device)
+            
+            # Backward pass with gradient accumulation
+            loss = losses['total'] / self.gradient_accumulation
+            self.scaler.scale(loss).backward()
+            
+            if (batch_idx + 1) % self.gradient_accumulation == 0:
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                self.optimizer.zero_grad()
+                
+        else:
+            predictions = self.model(batch_on_device)
+            base_model = self.model.module if hasattr(self.model, 'module') else self.model
+            losses = base_model.compute_loss(predictions, batch_on_device)
+            
+            # Backward pass with gradient accumulation
+            loss = losses['total'] / self.gradient_accumulation
+            loss.backward()
+            
+            if (batch_idx + 1) % self.gradient_accumulation == 0:
+                self.optimizer.step()
+                self.optimizer.zero_grad()
+        
+        return losses, predictions
+
+    def _should_save_checkpoint(self, batch_idx):
+        """Determine if checkpoint should be saved"""
+        if not self.enhanced_checkpoints:
+            return False
+        return (batch_idx > 0 and batch_idx % getattr(self, 'checkpoint_freq', 100) == 0)
 
     def _check_and_handle_auto_resume(self):
         """Check for auto-resume opportunities and handle them"""
@@ -1747,13 +1822,13 @@ def main():
     parser.add_argument('--lr-scaling', type=str, default='linear', choices=['linear', 'sqrt', 'none'],
                         help='Learning rate scaling rule for multi-GPU training')
     
-    # Enhanced checkpoint and resume arguments
-    parser.add_argument('--auto-resume', action='store_true', default=True,
-                        help='Automatically resume from latest checkpoint')
+    # Enhanced checkpoint and resume arguments (optional, backward compatible)
+    parser.add_argument('--auto-resume', action='store_true', default=False,
+                        help='Enable automatic resume from latest checkpoint')
     parser.add_argument('--checkpoint-freq', type=int, default=100,
-                        help='Save checkpoint every N batches')
+                        help='Save checkpoint every N batches (requires --auto-resume)')
     parser.add_argument('--resume-from', type=str, 
-                        help='Specific checkpoint path to resume from')
+                        help='Specific checkpoint path to resume from (enables enhanced resume)')
     parser.add_argument('--no-resume-prompt', action='store_true',
                         help='Skip interactive resume prompts')
     parser.add_argument('--checkpoint-validation', action='store_true', default=True,
@@ -1784,22 +1859,42 @@ def main():
         logger.error("Please ensure the nuScenes dataset and dependencies are properly installed.")
         return
 
-    # Create trainer with enhanced checkpoint support
+    # Determine if enhanced checkpoint features should be enabled
+    enable_enhanced_checkpoints = (
+        args.auto_resume or 
+        args.resume_from or 
+        args.checkpoint_freq != 100 or 
+        args.no_resume_prompt
+    ) and not args.disable_auto_resume
+    
+    # Create trainer with optional enhanced checkpoint support
     try:
-        trainer = NuScenesTrainer(
-            config, 
-            use_mixed_precision=args.mixed_precision,
-            gpu_ids=args.gpus,
-            distributed=args.distributed,
-            gradient_accumulation=args.gradient_accumulation,
-            lr_scaling=args.lr_scaling,
-            # Enhanced checkpoint and resume options
-            auto_resume=args.auto_resume and not args.disable_auto_resume,
-            checkpoint_freq=args.checkpoint_freq,
-            no_resume_prompt=args.no_resume_prompt,
-            checkpoint_validation=args.checkpoint_validation,
-            resume_from=args.resume_from or args.resume  # Support both new and legacy
-        )
+        if enable_enhanced_checkpoints:
+            logger.info("🔄 Enhanced checkpoint resume system enabled")
+            trainer = NuScenesTrainer(
+                config, 
+                use_mixed_precision=args.mixed_precision,
+                gpu_ids=args.gpus,
+                distributed=args.distributed,
+                gradient_accumulation=args.gradient_accumulation,
+                lr_scaling=args.lr_scaling,
+                # Enhanced checkpoint and resume options
+                auto_resume=args.auto_resume and not args.disable_auto_resume,
+                checkpoint_freq=args.checkpoint_freq,
+                no_resume_prompt=args.no_resume_prompt,
+                checkpoint_validation=args.checkpoint_validation,
+                resume_from=args.resume_from or args.resume  # Support both new and legacy
+            )
+        else:
+            logger.info("📁 Using standard checkpoint system (backward compatible)")
+            trainer = NuScenesTrainer(
+                config, 
+                use_mixed_precision=args.mixed_precision,
+                gpu_ids=args.gpus,
+                distributed=args.distributed,
+                gradient_accumulation=args.gradient_accumulation,
+                lr_scaling=args.lr_scaling
+            )
     except Exception as e:
         logger.error(f"Failed to create trainer: {e}")
         logger.error("Please check that nuScenes dataset is available and properly configured.")

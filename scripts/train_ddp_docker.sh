@@ -21,6 +21,12 @@ RESUME_CKPT=""
 MIXED_PRECISION=1
 DETACH=0
 
+# Enhanced checkpoint resume settings (optional)
+AUTO_RESUME=0
+CHECKPOINT_FREQ=""
+RESUME_FROM=""
+NO_RESUME_PROMPT=0
+
 print_help() {
   cat <<EOF
 BEVNeXt-SAM2: Docker DDP training launcher
@@ -41,6 +47,13 @@ Options:
   --port N                  DDP master port (default: 29500)
   --no-mixed-precision      Disable AMP mixed precision
   --detach                  Run container in background (docker -d)
+  
+  🔄 Enhanced Checkpoint Resume Options (optional):
+  --auto-resume             Enable automatic resume detection
+  --checkpoint-freq N       Save checkpoint every N batches
+  --resume-from PATH        Specific checkpoint to resume from
+  --no-resume-prompt        Skip interactive resume prompts
+  
   -h | --help               Show this help
 
 Examples:
@@ -50,6 +63,10 @@ Examples:
 
   # Explicit GPU IDs and resume
   ./scripts/train_ddp_docker.sh --gpus 0,1 --resume outputs/checkpoints/checkpoint_latest.pth
+  
+  # Enhanced checkpoint resume features
+  ./scripts/train_ddp_docker.sh --auto-resume --checkpoint-freq 50
+  ./scripts/train_ddp_docker.sh --resume-from outputs/best.pth --no-resume-prompt
 EOF
 }
 
@@ -69,6 +86,10 @@ while [[ $# -gt 0 ]]; do
     --port) MASTER_PORT="$2"; shift 2;;
     --no-mixed-precision) MIXED_PRECISION=0; shift;;
     --detach) DETACH=1; shift;;
+    --auto-resume) AUTO_RESUME=1; shift;;
+    --checkpoint-freq) CHECKPOINT_FREQ="$2"; shift 2;;
+    --resume-from) RESUME_FROM="$2"; shift 2;;
+    --no-resume-prompt) NO_RESUME_PROMPT=1; shift;;
     -h|--help) print_help; exit 0;;
     *) echo "Unknown option: $1"; print_help; exit 1;;
   esac
@@ -123,6 +144,12 @@ echo "Master port:     $MASTER_PORT"
 echo "Container:       $CONTAINER_NAME"
 [[ -n "$CONFIG_FILE" ]] && echo "Config:          $CONFIG_FILE"
 [[ -n "$RESUME_CKPT" ]] && echo "Resume:          $RESUME_CKPT"
+[[ -n "$RESUME_FROM" ]] && echo "Resume from:     $RESUME_FROM"
+echo ""
+echo "🔄 Enhanced Checkpoint Features:"
+[[ $AUTO_RESUME -eq 1 ]] && echo "Auto-resume:     enabled" || echo "Auto-resume:     disabled"
+[[ -n "$CHECKPOINT_FREQ" ]] && echo "Checkpoint freq: every $CHECKPOINT_FREQ batches"
+[[ $NO_RESUME_PROMPT -eq 1 ]] && echo "Resume prompts:  disabled" || echo "Resume prompts:  enabled"
 echo "======================================"
 
 # Build torchrun command
@@ -137,6 +164,12 @@ TRAIN_ARGS=(
 [[ $MIXED_PRECISION -eq 1 ]] && TRAIN_ARGS+=("--mixed-precision")
 [[ -n "$CONFIG_FILE" ]] && TRAIN_ARGS+=("--config" "/workspace/bevnext-sam2/$CONFIG_FILE")
 [[ -n "$RESUME_CKPT" ]] && TRAIN_ARGS+=("--resume" "/workspace/bevnext-sam2/$RESUME_CKPT")
+
+# Enhanced checkpoint resume arguments (optional)
+[[ $AUTO_RESUME -eq 1 ]] && TRAIN_ARGS+=("--auto-resume")
+[[ -n "$CHECKPOINT_FREQ" ]] && TRAIN_ARGS+=("--checkpoint-freq" "$CHECKPOINT_FREQ")
+[[ -n "$RESUME_FROM" ]] && TRAIN_ARGS+=("--resume-from" "/workspace/bevnext-sam2/$RESUME_FROM")
+[[ $NO_RESUME_PROMPT -eq 1 ]] && TRAIN_ARGS+=("--no-resume-prompt")
 
 INNER_CMD=$(cat <<EOF
 set -euo pipefail
@@ -185,6 +218,20 @@ if [[ $DETACH -eq 1 ]]; then
   echo "  docker logs -f $CONTAINER_NAME"
 else
   echo "  scripts/monitor_training.sh"
+fi
+
+echo ""
+if [[ $AUTO_RESUME -eq 1 ]] || [[ -n "$RESUME_FROM" ]] || [[ -n "$CHECKPOINT_FREQ" ]]; then
+  echo "🔄 Enhanced checkpoint resume features were enabled:"
+  [[ $AUTO_RESUME -eq 1 ]] && echo "  • Automatic resume detection active"
+  [[ -n "$CHECKPOINT_FREQ" ]] && echo "  • Sub-epoch checkpointing every $CHECKPOINT_FREQ batches"
+  [[ -n "$RESUME_FROM" ]] && echo "  • Resumed from specific checkpoint: $RESUME_FROM"
+  [[ $NO_RESUME_PROMPT -eq 1 ]] && echo "  • Non-interactive mode (no resume prompts)"
+  echo "  • Training will automatically recover from 'connection reset by peer' errors"
+  echo "  • Checkpoints saved with validation and compression"
+else
+  echo "📁 Standard checkpoint system used (backward compatible)"
+  echo "💡 To enable enhanced checkpoint resume: add --auto-resume or other options"
 fi
 
 
