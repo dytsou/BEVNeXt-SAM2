@@ -11,10 +11,9 @@ CONFIG ?=
 RESUME ?=
 DETACH ?=
 
-# Validation variables
+# Validation variables  
 CHECKPOINT ?= checkpoints/latest.pth
-OUTPUT_DIR ?= outputs/validation
-MAX_SAMPLES ?= 100
+GPU_SUPPORT ?= 1
 
 CONFIG_FLAG := $(if $(CONFIG),--config $(CONFIG),)
 RESUME_FLAG := $(if $(RESUME),--resume $(RESUME),)
@@ -46,13 +45,12 @@ help:
 	@echo ""
 	@echo "Validation Variables (Docker-based):"
 	@echo "  CHECKPOINT=checkpoints/latest.pth  Model checkpoint to validate"
-	@echo "  OUTPUT_DIR=outputs/validation      Validation output directory"
-	@echo "  MAX_SAMPLES=100                    Max samples for validation"
+	@echo "  GPU_SUPPORT=1                      Enable GPU support (0 to disable)"
 	@echo "  Note: All validation runs in Docker automatically"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make validate DATA_PATH=/data/nuscenes CHECKPOINT=models/best.pth"
-	@echo "  make validate-full"
+	@echo "  make validate-full GPU_SUPPORT=0  # CPU-only validation"
 	@echo "  make validate-dataset"
 	@echo "  make train-ddp DATA_PATH=/data/nuscenes GPUS=4 BATCH=2"
 
@@ -92,25 +90,48 @@ ensure-docker:
 # Override validate targets to use ensure-docker
 validate-quick: ensure-docker
 	@echo "🔍 Running quick model validation with Docker..."
-	@echo "🐳 Using Docker for validation"
-	./scripts/run.sh validate \
-		--checkpoint $(CHECKPOINT) \
-		--data-path $(DATA_PATH) \
-		--output-dir $(OUTPUT_DIR) \
-		--max-samples $(MAX_SAMPLES)
+	@if [ "$(GPU_SUPPORT)" = "1" ]; then \
+		echo "🐳 Using Docker for validation with GPU support"; \
+		./scripts/run.sh validate \
+			--checkpoint $(CHECKPOINT) \
+			--data-path $(DATA_PATH) \
+			--gpu; \
+	else \
+		echo "🐳 Using Docker for validation (CPU only)"; \
+		./scripts/run.sh validate \
+			--checkpoint $(CHECKPOINT) \
+			--data-path $(DATA_PATH) \
+			--no-gpu; \
+	fi
 
 validate-full: ensure-docker
 	@echo "🔍 Running full model validation with all metrics..."
-	@echo "🐳 Using Docker for full validation"
-	./scripts/run.sh validate-full \
-		--checkpoint $(CHECKPOINT) \
-		--data-path $(DATA_PATH) \
-		--output-dir $(OUTPUT_DIR)
+	@if [ "$(GPU_SUPPORT)" = "1" ]; then \
+		echo "🐳 Using Docker for full validation with GPU support"; \
+		./scripts/run.sh validate \
+			--checkpoint $(CHECKPOINT) \
+			--data-path $(DATA_PATH) \
+			--gpu; \
+	else \
+		echo "🐳 Using Docker for full validation (CPU only)"; \
+		./scripts/run.sh validate \
+			--checkpoint $(CHECKPOINT) \
+			--data-path $(DATA_PATH) \
+			--no-gpu; \
+	fi
 
 validate-dataset: ensure-docker
 	@echo "🔍 Running dataset integrity validation..."
-	@echo "🐳 Using Docker for dataset validation"
-	./scripts/run.sh validate-nuscenes \
-		--data-path $(DATA_PATH)
+	@if [ "$(GPU_SUPPORT)" = "1" ]; then \
+		echo "🐳 Using Docker for dataset validation with GPU support"; \
+		./scripts/run.sh validate-nuscenes \
+			--data-path $(DATA_PATH) \
+			--gpu; \
+	else \
+		echo "🐳 Using Docker for dataset validation (CPU only)"; \
+		./scripts/run.sh validate-nuscenes \
+			--data-path $(DATA_PATH) \
+			--no-gpu; \
+	fi
 
 
