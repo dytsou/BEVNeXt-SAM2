@@ -1,6 +1,6 @@
 # Simple Makefile helpers for BEVNeXt-SAM2
 
-.PHONY: help build train-ddp monitor validate validate-quick validate-full validate-dataset
+.PHONY: help build train-ddp monitor validate validate-quick validate-full validate-dataset ensure-docker
 
 # Training variables
 DATA_PATH ?= /data/nuscenes
@@ -15,13 +15,11 @@ DETACH ?=
 CHECKPOINT ?= checkpoints/latest.pth
 OUTPUT_DIR ?= outputs/validation
 MAX_SAMPLES ?= 100
-DEVICE ?= auto
-DOCKER ?=
 
 CONFIG_FLAG := $(if $(CONFIG),--config $(CONFIG),)
 RESUME_FLAG := $(if $(RESUME),--resume $(RESUME),)
 DETACH_FLAG := $(if $(DETACH),--detach,)
-DOCKER_FLAG := $(if $(DOCKER),--docker,)
+
 
 help:
 	@echo "🚀 BEVNeXt-SAM2 Makefile Commands"
@@ -46,16 +44,16 @@ help:
 	@echo "  RESUME=checkpoint.pth     Checkpoint to resume from"
 	@echo "  DETACH=1                  Run container in background"
 	@echo ""
-	@echo "Validation Variables:"
+	@echo "Validation Variables (Docker-based):"
 	@echo "  CHECKPOINT=checkpoints/latest.pth  Model checkpoint to validate"
 	@echo "  OUTPUT_DIR=outputs/validation      Validation output directory"
 	@echo "  MAX_SAMPLES=100                    Max samples for validation"
-	@echo "  DEVICE=auto                        Device: auto, cuda, cpu"
-	@echo "  DOCKER=1                           Use Docker for validation"
+	@echo "  Note: All validation runs in Docker automatically"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make validate DATA_PATH=/data/nuscenes CHECKPOINT=models/best.pth"
-	@echo "  make validate-full DOCKER=1"
+	@echo "  make validate-full"
+	@echo "  make validate-dataset"
 	@echo "  make train-ddp DATA_PATH=/data/nuscenes GPUS=4 BATCH=2"
 
 build:
@@ -78,53 +76,41 @@ monitor:
 validate: validate-quick
 	@echo "✅ Quick validation completed. Use 'make validate-full' for comprehensive validation."
 
-validate-quick:
-	@echo "🔍 Running quick model validation..."
-	python quick_validate.py \
-		--checkpoint $(CHECKPOINT) \
-		--data-root $(DATA_PATH) \
-		--output-dir $(OUTPUT_DIR) \
-		--max-samples $(MAX_SAMPLES) \
-		--device $(DEVICE) \
-		$(DOCKER_FLAG)
 
-validate-full:
+
+# Add dependency to auto-build Docker image for all validation targets
+.PHONY: ensure-docker
+ensure-docker:
+	@if ! docker image inspect bevnext-sam2 >/dev/null 2>&1; then \
+		echo "🔨 Docker image not found. Building bevnext-sam2 image..."; \
+		$(MAKE) build; \
+	else \
+		echo "✅ Docker image bevnext-sam2 found"; \
+	fi
+
+
+# Override validate targets to use ensure-docker
+validate-quick: ensure-docker
+	@echo "🔍 Running quick model validation with Docker..."
+	@echo "🐳 Using Docker for validation"
+	./scripts/run.sh validate \
+		--checkpoint $(CHECKPOINT) \
+		--data-path $(DATA_PATH) \
+		--output-dir $(OUTPUT_DIR) \
+		--max-samples $(MAX_SAMPLES)
+
+validate-full: ensure-docker
 	@echo "🔍 Running full model validation with all metrics..."
-	python quick_validate.py \
+	@echo "🐳 Using Docker for full validation"
+	./scripts/run.sh validate-full \
 		--checkpoint $(CHECKPOINT) \
-		--data-root $(DATA_PATH) \
-		--output-dir $(OUTPUT_DIR) \
-		--device $(DEVICE) \
-		--full \
-		$(DOCKER_FLAG)
+		--data-path $(DATA_PATH) \
+		--output-dir $(OUTPUT_DIR)
 
-validate-dataset:
+validate-dataset: ensure-docker
 	@echo "🔍 Running dataset integrity validation..."
-	python quick_validate.py \
-		--dataset-only \
-		--data-root $(DATA_PATH) \
-		--output-dir $(OUTPUT_DIR) \
-		$(DOCKER_FLAG)
-
-# Alternative shell script validation (for CI/CD)
-validate-shell:
-	@echo "🔍 Running validation with shell script..."
-	./scripts/quick_validate.sh \
-		--checkpoint $(CHECKPOINT) \
-		--data-root $(DATA_PATH) \
-		--output-dir $(OUTPUT_DIR) \
-		--max-samples $(MAX_SAMPLES) \
-		--device $(DEVICE) \
-		$(DOCKER_FLAG)
-
-validate-shell-full:
-	@echo "🔍 Running full validation with shell script..."
-	./scripts/quick_validate.sh \
-		--checkpoint $(CHECKPOINT) \
-		--data-root $(DATA_PATH) \
-		--output-dir $(OUTPUT_DIR) \
-		--device $(DEVICE) \
-		--full \
-		$(DOCKER_FLAG)
+	@echo "🐳 Using Docker for dataset validation"
+	./scripts/run.sh validate-nuscenes \
+		--data-path $(DATA_PATH)
 
 

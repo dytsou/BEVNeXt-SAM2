@@ -358,9 +358,9 @@ tail -f outputs/training_*/tensorboard/events.*
 
 ### Quick Validation
 
-#### 1. Makefile Commands (Easiest - Recommended)
+#### 1. Makefile Commands (Easiest - Docker-based)
 ```bash
-# Quick validation with sensible defaults
+# Quick validation (auto-builds Docker if needed)
 make validate DATA_PATH=/path/to/nuscenes
 
 # Full validation with all metrics and visualizations  
@@ -369,11 +369,13 @@ make validate-full DATA_PATH=/path/to/nuscenes
 # Dataset integrity check only
 make validate-dataset DATA_PATH=/path/to/nuscenes
 
-# Custom checkpoint and options
-make validate CHECKPOINT=models/best.pth DATA_PATH=/data/nuscenes DOCKER=1
+# Custom checkpoint and output directory
+make validate CHECKPOINT=models/best.pth DATA_PATH=/data/nuscenes OUTPUT_DIR=outputs/my_validation
 
 # View all available validation options
 make help
+
+# Note: All validation commands automatically use Docker and build the image if needed
 ```
 
 #### 2. Direct Script Usage
@@ -494,14 +496,14 @@ python tools/test.py \
 
 #### Validation Metrics Overview
 
-| Validation Type | Command | Metrics Provided | Time | Use Case |
-|----------------|---------|------------------|------|----------|
-| **Quick Check** | `make validate` | Basic IoU, accuracy | 2-5 min | Development testing |
-| **Dataset Check** | `make validate-dataset` | Data integrity, completeness | 5-10 min | Setup validation |
-| **Full Validation** | `make validate-full` | All nuScenes metrics + viz | 30-60 min | Production validation |
-| **Custom Eval** | `python evaluate_model.py` | Custom metrics + speed | 15-30 min | Performance analysis |
-| **MMDet3D Eval** | `python tools/test.py` | Standard detection metrics | 20-40 min | Benchmark comparison |
-| **Shell Script** | `./scripts/quick_validate.sh` | Configurable validation | 5-60 min | CI/CD pipelines |
+| Validation Type | Command | Docker | Metrics Provided | Time | Use Case |
+|----------------|---------|--------|------------------|------|----------|
+| **Quick Check** | `make validate` | ✅ Auto | Basic IoU, accuracy | 2-5 min | Development testing |
+| **Dataset Check** | `make validate-dataset` | ✅ Auto | Data integrity, completeness | 5-10 min | Setup validation |
+| **Full Validation** | `make validate-full` | ✅ Auto | All nuScenes metrics + viz | 30-60 min | Production validation |
+| **Custom Eval** | `python evaluate_model.py` | ❌ Native | Custom metrics + speed | 15-30 min | Performance analysis |
+| **MMDet3D Eval** | `python tools/test.py` | ❌ Native | Standard detection metrics | 20-40 min | Benchmark comparison |
+| **Shell Script** | `./scripts/quick_validate.sh` | 🔧 Optional | Configurable validation | 5-60 min | CI/CD pipelines |
 
 ### Validation Results Interpretation
 
@@ -947,7 +949,7 @@ make validate-dataset   # Dataset integrity check
 
 # Examples with custom paths
 make validate DATA_PATH=/data/nuscenes CHECKPOINT=models/best.pth
-make validate-full DOCKER=1
+make validate-full  # Always uses Docker
 make train-ddp DATA_PATH=/data/nuscenes GPUS=4 BATCH=2
 ```
 

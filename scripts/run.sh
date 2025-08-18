@@ -368,24 +368,82 @@ case $MODE in
         ;;
         
     validate)
-        echo -e "${GREEN}Validating trained model...${NC}"
+        echo -e "${GREEN}Validating trained model with Docker...${NC}"
         
-        if [[ -z "$CHECKPOINT_PATH" ]]; then
-            echo -e "${YELLOW}No checkpoint specified, using latest checkpoint${NC}"
-            CHECKPOINT_PATH="outputs/checkpoints/latest.pth"
-        fi
+        # Parse additional arguments
+        CHECKPOINT_PATH="checkpoints/latest.pth"
+        OUTPUT_DIR="outputs/validation"
+        MAX_SAMPLES="100"
+        
+        while [[ $# -gt 0 ]]; do
+            case $1 in
+                --checkpoint)
+                    CHECKPOINT_PATH="$2"
+                    shift 2
+                    ;;
+                --output-dir)
+                    OUTPUT_DIR="$2"
+                    shift 2
+                    ;;
+                --max-samples)
+                    MAX_SAMPLES="$2"
+                    shift 2
+                    ;;
+                *)
+                    shift
+                    ;;
+            esac
+        done
         
         remove_container "$CONTAINER_NAME"
         
         DOCKER_CMD=$(build_docker_cmd)
         DOCKER_CMD="$DOCKER_CMD $IMAGE_NAME"
         
-        VALIDATE_CMD="python validation/validate_model.py --checkpoint $CHECKPOINT_PATH --data-root /workspace/data/nuscenes"
+        VALIDATE_CMD="python validation/validate_model.py --checkpoint $CHECKPOINT_PATH --data-root /workspace/data/nuscenes --output-dir /workspace/$OUTPUT_DIR --max-samples $MAX_SAMPLES"
         
         if [[ "$DRY_RUN" == true ]]; then
             echo "$DOCKER_CMD bash -c \"$VALIDATE_CMD\""
         else
-            echo -e "${GREEN}🔍 Starting model validation...${NC}"
+            echo -e "${GREEN}🔍 Starting Docker model validation...${NC}"
+            eval "$DOCKER_CMD bash -c \"$VALIDATE_CMD\""
+        fi
+        ;;
+        
+    validate-full)
+        echo -e "${GREEN}Running full model validation with Docker...${NC}"
+        
+        # Parse additional arguments
+        CHECKPOINT_PATH="checkpoints/latest.pth"
+        OUTPUT_DIR="outputs/validation"
+        
+        while [[ $# -gt 0 ]]; do
+            case $1 in
+                --checkpoint)
+                    CHECKPOINT_PATH="$2"
+                    shift 2
+                    ;;
+                --output-dir)
+                    OUTPUT_DIR="$2"
+                    shift 2
+                    ;;
+                *)
+                    shift
+                    ;;
+            esac
+        done
+        
+        remove_container "$CONTAINER_NAME"
+        
+        DOCKER_CMD=$(build_docker_cmd)
+        DOCKER_CMD="$DOCKER_CMD $IMAGE_NAME"
+        
+        VALIDATE_CMD="python validation/validate_model.py --checkpoint $CHECKPOINT_PATH --data-root /workspace/data/nuscenes --output-dir /workspace/$OUTPUT_DIR --run-nuscenes-eval --generate-viz"
+        
+        if [[ "$DRY_RUN" == true ]]; then
+            echo "$DOCKER_CMD bash -c \"$VALIDATE_CMD\""
+        else
+            echo -e "${GREEN}🔍 Starting full Docker validation...${NC}"
             eval "$DOCKER_CMD bash -c \"$VALIDATE_CMD\""
         fi
         ;;
