@@ -29,8 +29,11 @@ This repository merges [BEVNeXt](https://github.com/woxihuanjiangguo/BEVNeXt) an
     --epochs 50 \
     --data-root /path/to/nuscenes
 
-# Or use Makefile for convenience
+# Or use Makefile for convenience  
 make train-ddp DATA_PATH=/path/to/nuscenes GPUS=2 BATCH=4 EPOCHS=50
+
+# Validate trained model
+make validate DATA_PATH=/path/to/nuscenes
 ```
 
 #### Single GPU / Development
@@ -64,7 +67,7 @@ python test_training_setup.py
 
 ### Core Components
 - **BEVNeXt**: State-of-the-art Bird's Eye View (BEV) 3D object detection
-- **SAM 2**: Segment Anything Model for high-quality image and video segmentation  
+- **SAM 2**: Segment Anything Model for high-quality image and video segmentation
 - **Integration Modules**: Fusion layers combining 3D detection with 2D segmentation
 - **Multi-GPU Training**: Production-ready distributed training infrastructure
 
@@ -351,46 +354,215 @@ tail -f outputs/training_*/tensorboard/events.*
 - **Learning Rate**: Scale linearly with number of GPUs
 - **Checkpointing**: Automatic checkpoint saving every epoch
 
-## Evaluation
+## Model Validation & Evaluation
 
-### Model Evaluation
+### Quick Validation
 
-#### Comprehensive Model Testing
+#### 1. Makefile Commands (Easiest - Recommended)
 ```bash
-# Complete evaluation with real nuScenes data
-python evaluate_model.py \
-    --checkpoint checkpoints/latest.pth \
-    --test-samples 100 \
-    --output-dir outputs/evaluation
+# Quick validation with sensible defaults
+make validate DATA_PATH=/path/to/nuscenes
 
-# Docker evaluation
+# Full validation with all metrics and visualizations  
+make validate-full DATA_PATH=/path/to/nuscenes
+
+# Dataset integrity check only
+make validate-dataset DATA_PATH=/path/to/nuscenes
+
+# Custom checkpoint and options
+make validate CHECKPOINT=models/best.pth DATA_PATH=/data/nuscenes DOCKER=1
+
+# View all available validation options
+make help
+```
+
+#### 2. Direct Script Usage
+```bash
+# Python convenience script
+python quick_validate.py \
+    --checkpoint checkpoints/latest.pth \
+    --data-root /path/to/nuscenes
+
+# Shell script (more options for CI/CD)
+./scripts/quick_validate.sh \
+    --checkpoint checkpoints/latest.pth \
+    --data-root /path/to/nuscenes \
+    --full
+```
+
+#### 3. Manual Model Checkpoint Validation
+```bash
+# Quick validation on trained model (minimal samples)
+python validation/validate_model.py \
+    --checkpoint checkpoints/latest.pth \
+    --data-root /path/to/nuscenes \
+    --max-samples 50 \
+    --output-dir outputs/quick_validation
+
+# Docker quick validation
 ./scripts/run.sh validate \
     --checkpoint checkpoints/latest.pth \
     --data-path /path/to/nuscenes
 ```
 
-#### nuScenes Official Evaluation
+#### 4. Dataset Integrity Validation
 ```bash
-# Run official nuScenes evaluation metrics
+# Quick dataset validation with convenience script
+python quick_validate.py --dataset-only --data-root /path/to/nuscenes
+
+# Manual dataset validation
+python validation/nuscenes_validator.py \
+    --data-root /path/to/nuscenes \
+    --version v1.0-trainval \
+    --output-dir outputs/dataset_validation
+
+# Docker dataset validation
+./scripts/run.sh validate-nuscenes --data-path /path/to/nuscenes
+```
+
+### Comprehensive Model Validation
+
+#### 1. Full Model Performance Validation
+```bash
+# Complete validation with all metrics and visualizations
 python validation/validate_model.py \
     --checkpoint checkpoints/latest.pth \
     --data-root /path/to/nuscenes \
     --run-nuscenes-eval \
-    --generate-viz
+    --generate-viz \
+    --output-dir outputs/full_validation
 
-# MMDetection3D style evaluation
+# Expected output metrics:
+# - mean_iou: 0.xxxx
+# - classification_accuracy: 0.xxxx
+# - Official nuScenes mAP: 0.xxxx
+```
+
+#### 2. Custom Evaluation Script
+```bash
+# Comprehensive evaluation with visualizations
+python evaluate_model.py \
+    --checkpoint checkpoints/latest.pth \
+    --test-samples 500 \
+    --device cuda \
+    --iou-threshold 0.5 \
+    --output-dir outputs/evaluation
+
+# This provides:
+# - 3D detection performance metrics
+# - Segmentation quality assessment  
+# - Inference speed benchmarks
+# - Sample visualizations
+```
+
+#### 3. MMDetection3D Style Validation
+```bash
+# Standard mmdet3d evaluation
 python tools/test.py \
     configs/bevnext/bevnext-stage2.py \
     checkpoints/latest.pth \
-    --eval bbox
+    --eval bbox \
+    --show-dir outputs/visualizations
+
+# Multi-GPU evaluation
+python tools/test.py \
+    configs/bevnext/bevnext-stage2.py \
+    checkpoints/latest.pth \
+    --eval bbox \
+    --launcher pytorch \
+    --gpus 2
 ```
 
-#### Performance Metrics
-The evaluation provides:
-- **Detection Metrics**: mAP@0.5, mAP@0.75, mAP@0.5:0.95
-- **Segmentation Metrics**: Mean IoU, Dice coefficient, Pixel accuracy
-- **Speed Metrics**: Inference time, FPS
-- **nuScenes Metrics**: Official mAP, mATE, mASE, mAOE, mAVE, mAAE
+### Validation Workflows
+
+#### Complete Pipeline Validation
+```bash
+# Full pipeline: build + validate + evaluate
+./scripts/build-and-train.sh \
+    --data-path /path/to/nuscenes \
+    --gpu \
+    --skip-training \
+    --epochs 0
+
+# This runs:
+# 1. Container build
+# 2. Dataset validation  
+# 3. Model checkpoint validation
+# 4. Performance evaluation
+# 5. Results visualization
+```
+
+#### Validation Metrics Overview
+
+| Validation Type | Command | Metrics Provided | Time | Use Case |
+|----------------|---------|------------------|------|----------|
+| **Quick Check** | `make validate` | Basic IoU, accuracy | 2-5 min | Development testing |
+| **Dataset Check** | `make validate-dataset` | Data integrity, completeness | 5-10 min | Setup validation |
+| **Full Validation** | `make validate-full` | All nuScenes metrics + viz | 30-60 min | Production validation |
+| **Custom Eval** | `python evaluate_model.py` | Custom metrics + speed | 15-30 min | Performance analysis |
+| **MMDet3D Eval** | `python tools/test.py` | Standard detection metrics | 20-40 min | Benchmark comparison |
+| **Shell Script** | `./scripts/quick_validate.sh` | Configurable validation | 5-60 min | CI/CD pipelines |
+
+### Validation Results Interpretation
+
+#### Expected Performance Ranges
+```bash
+# Good model performance indicators:
+# Detection:
+#   - mAP@0.5: > 0.35 (35%+)
+#   - mAP@0.75: > 0.25 (25%+)  
+#   - Classification accuracy: > 0.80 (80%+)
+
+# Segmentation:
+#   - Mean IoU: > 0.60 (60%+)
+#   - Dice coefficient: > 0.70 (70%+)
+#   - Pixel accuracy: > 0.85 (85%+)
+
+# Speed (RTX 2080Ti):
+#   - Inference time: < 150ms per sample
+#   - FPS: > 6.5 frames per second
+```
+
+#### Troubleshooting Validation Issues
+
+**Common Issues & Solutions:**
+
+1. **Low Detection Performance**
+```bash
+# Check training logs and resume training
+tail -f outputs/training_*/tensorboard/events.*
+
+# Validate with different IoU thresholds  
+python validation/validate_model.py \
+    --checkpoint checkpoints/latest.pth \
+    --data-root /path/to/nuscenes \
+    --max-samples 100
+```
+
+2. **Memory Issues During Validation**
+```bash
+# Use smaller batch size and enable checkpointing
+python validation/validate_model.py \
+    --checkpoint checkpoints/latest.pth \
+    --data-root /path/to/nuscenes \
+    --max-samples 200 \
+    --config training/config_cpu_optimized.json
+```
+
+3. **Dataset Validation Failures**
+```bash
+# Check dataset integrity first
+python validation/nuscenes_validator.py \
+    --data-root /path/to/nuscenes \
+    --version v1.0-mini \
+    --verbose
+
+# Re-setup dataset if issues found
+python setup_nuscenes_integration.py \
+    --data-root /path/to/nuscenes \
+    --version v1.0-trainval \
+    --force-rebuild
+```
 
 ### Inference
 
@@ -758,6 +930,27 @@ BEVNeXt-SAM2/
 
 ### Development & Testing
 
+#### Makefile Commands (Quick Reference)
+```bash
+# View all available commands
+make help
+
+# Training
+make build              # Build Docker image
+make train-ddp          # Multi-GPU training  
+make monitor            # Monitor training
+
+# Validation (NEW!)
+make validate           # Quick model validation
+make validate-full      # Complete validation with metrics + viz
+make validate-dataset   # Dataset integrity check
+
+# Examples with custom paths
+make validate DATA_PATH=/data/nuscenes CHECKPOINT=models/best.pth
+make validate-full DOCKER=1
+make train-ddp DATA_PATH=/data/nuscenes GPUS=4 BATCH=2
+```
+
 #### Development Environment
 ```bash
 # Interactive development with Jupyter
@@ -772,7 +965,7 @@ pip install -e ".[dev]"
 jupyter lab --allow-root
 ```
 
-#### Testing & Validation
+#### Testing & Validation Scripts
 ```bash
 # Test installation and setup
 python test_training_setup.py
@@ -800,11 +993,6 @@ python scripts/test_single_gpu.py
 
 # Build complete pipeline (build + train + evaluate)
 ./scripts/build-and-train.sh --data-path /path/to/nuscenes --gpu
-
-# Quick Makefile commands
-make build              # Build Docker image
-make train-ddp          # Multi-GPU training
-make monitor            # Monitor training
 ```
 
 #### Development Tips
