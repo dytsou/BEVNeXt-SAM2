@@ -23,9 +23,12 @@ import torch
 import torch.nn as nn
 import numpy as np
 from tqdm import tqdm
-import matplotlib.pyplot as plt
-import seaborn as sns
 from collections import defaultdict, OrderedDict
+
+import matplotlib.pyplot as plt
+MATPLOTLIB_AVAILABLE = True
+import seaborn as sns
+SEABORN_AVAILABLE = True
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -413,6 +416,10 @@ class ModelValidator:
     
     def generate_visualizations(self, output_dir: str = "outputs/validation") -> None:
         """Generate validation visualizations"""
+        if not MATPLOTLIB_AVAILABLE:
+            logger.warning("Matplotlib not available. Skipping visualizations.")
+            return
+            
         logger.info("Generating validation visualizations...")
         
         output_dir = Path(output_dir)
@@ -431,6 +438,9 @@ class ModelValidator:
     
     def _plot_metrics(self, output_dir: Path):
         """Plot validation metrics"""
+        if not MATPLOTLIB_AVAILABLE:
+            return
+            
         fig, axes = plt.subplots(2, 2, figsize=(15, 10))
         fig.suptitle('Validation Metrics', fontsize=16)
         
