@@ -57,6 +57,11 @@ from training.multi_gpu_utils import (
     GradientAccumulator
 )
 
+# Import enhanced checkpoint management
+from training.checkpoint_manager import CheckpointManager, create_checkpoint_manager
+from training.auto_resume import AutoResumeManager, create_auto_resume_manager
+from training.network_error_handler import NetworkErrorHandler, create_network_error_handler
+
 # Import nuScenes components
 try:
     from nuscenes_dataset_v2 import (
@@ -800,11 +805,24 @@ class NuScenesTrainer:
         gpu_ids: Optional[str] = None,
         distributed: bool = False,
         gradient_accumulation: int = 1,
-        lr_scaling: str = 'linear'
+        lr_scaling: str = 'linear',
+        # Enhanced checkpoint and resume options
+        auto_resume: bool = True,
+        checkpoint_freq: int = 100,
+        no_resume_prompt: bool = False,
+        checkpoint_validation: bool = True,
+        resume_from: Optional[str] = None
     ):
         self.config = config
         self.use_mixed_precision = use_mixed_precision and torch.cuda.is_available()
         self.gradient_accumulation = gradient_accumulation
+        
+        # Enhanced checkpoint settings
+        self.auto_resume = auto_resume
+        self.checkpoint_freq = checkpoint_freq
+        self.no_resume_prompt = no_resume_prompt
+        self.checkpoint_validation = checkpoint_validation
+        self.resume_from = resume_from
 
         # Setup multi-GPU wrapper
         self.gpu_wrapper = MultiGPUWrapper(
@@ -826,6 +844,42 @@ class NuScenesTrainer:
         self.epoch = 0
         self.best_val_loss = float('inf')
         self.training_stats = defaultdict(list)
+        self.batch_step = 0  # For sub-epoch checkpointing
+        
+        # Setup output directory
+        self.output_dir = Path(config['output_dir'])
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Enhanced checkpoint manager
+        self.checkpoint_manager = create_checkpoint_manager(
+            checkpoint_dir=self.output_dir / 'checkpoints',
+            keep_latest=5,
+            keep_best=3,
+            enable_compression=True,
+            async_save=True,
+            max_disk_usage_gb=20.0
+        )
+        
+        # Auto-resume manager  
+        self.auto_resume_manager = create_auto_resume_manager(
+            checkpoint_manager=self.checkpoint_manager,
+            interactive=not self.no_resume_prompt,
+            auto_resume_threshold_hours=24.0,
+            min_epochs_for_auto_resume=1
+        )
+        
+        # Network error handler
+        self.network_error_handler = create_network_error_handler(
+            max_retries=10,
+            base_delay=1.0,
+            enable_monitoring=True,
+            log_file=self.output_dir / 'network_errors.log',
+            emergency_callback=self._emergency_callback
+        )
+        
+        if self.gpu_wrapper.is_main_process():
+            logger.info(f"Enhanced checkpoint management enabled: {self.output_dir / 'checkpoints'}")
+            logger.info(f"Auto-resume: {auto_resume}, Checkpoint frequency: {checkpoint_freq} batches")
 
         # Setup model
         model = EnhancedBEVNeXtSAM2Model(config)
@@ -895,6 +949,9 @@ class NuScenesTrainer:
             self.logger = logging.getLogger(__name__)
             self.writer = None
             
+        # Check for auto-resume opportunity
+        self._check_and_handle_auto_resume()
+        
         # Log setup information
         if self.gpu_wrapper.is_main_process():
             logger.info(f"Multi-GPU Training Setup:")
@@ -1241,8 +1298,43 @@ class NuScenesTrainer:
 
         return metrics
 
-    def save_checkpoint(self, is_best: bool = False):
-        """Save model checkpoint with fallback directory support"""
+    def save_checkpoint(self, is_best: bool = False, is_emergency: bool = False):
+        """Save model checkpoint using enhanced checkpoint manager"""
+        if not self.gpu_wrapper.is_main_process():
+            return  # Only main process saves checkpoints
+            
+        try:
+            # Get current training metrics
+            current_metrics = {}
+            if hasattr(self, 'last_train_metrics'):
+                current_metrics.update(self.last_train_metrics)
+            if hasattr(self, 'last_val_metrics'):
+                current_metrics.update({f'val_{k}': v for k, v in self.last_val_metrics.items()})
+            
+            # Use enhanced checkpoint manager
+            checkpoint_path = self.checkpoint_manager.save_checkpoint(
+                model_state=self.model.state_dict(),
+                optimizer_state=self.optimizer.state_dict(),
+                scheduler_state=self.scheduler.state_dict(),
+                epoch=self.epoch,
+                step=self.batch_step,
+                metrics=current_metrics,
+                model_config=self.config,
+                is_best=is_best,
+                is_emergency=is_emergency,
+                blocking=is_emergency  # Emergency saves are always synchronous
+            )
+            
+            if checkpoint_path:
+                logger.info(f"Enhanced checkpoint saved: {checkpoint_path}")
+                
+        except Exception as e:
+            logger.error(f"Enhanced checkpoint save failed: {e}")
+            # Fallback to basic checkpoint save
+            self._fallback_checkpoint_save(is_best, is_emergency)
+    
+    def _fallback_checkpoint_save(self, is_best: bool = False, is_emergency: bool = False):
+        """Fallback checkpoint saving method"""
         import tempfile
         import os
         
@@ -1281,34 +1373,44 @@ class NuScenesTrainer:
             'scheduler_state_dict': self.scheduler.state_dict(),
             'best_val_loss': self.best_val_loss,
             'config': self.config,
-            'training_stats': dict(self.training_stats)
+            'training_stats': dict(self.training_stats),
+            'batch_step': getattr(self, 'batch_step', 0)
         }
 
-        # Save latest checkpoint
-        latest_path = successful_dir / 'checkpoint_latest.pth'
-        try:
-            torch.save(checkpoint, latest_path)
-            logger.info(f"Latest checkpoint saved to: {latest_path}")
-        except Exception as e:
-            logger.error(f"Failed to save latest checkpoint: {e}")
-
-        # Save best checkpoint
-        if is_best:
-            best_path = successful_dir / 'checkpoint_best.pth'
+        # Save based on type
+        if is_emergency:
+            emergency_path = successful_dir / f'emergency_checkpoint_{int(time.time())}.pth'
             try:
-                torch.save(checkpoint, best_path)
-                logger.info(f"New best model saved with val_loss: {self.best_val_loss:.4f} to: {best_path}")
+                torch.save(checkpoint, emergency_path)
+                logger.info(f"Emergency checkpoint saved to: {emergency_path}")
             except Exception as e:
-                logger.error(f"Failed to save best checkpoint: {e}")
-
-        # Save epoch checkpoint
-        if (self.epoch + 1) % 10 == 0:
-            epoch_path = successful_dir / f'checkpoint_epoch_{self.epoch+1}.pth'
+                logger.error(f"Failed to save emergency checkpoint: {e}")
+        else:
+            # Save latest checkpoint
+            latest_path = successful_dir / 'checkpoint_latest.pth'
             try:
-                torch.save(checkpoint, epoch_path)
-                logger.info(f"Epoch {self.epoch+1} checkpoint saved to: {epoch_path}")
+                torch.save(checkpoint, latest_path)
+                logger.info(f"Latest checkpoint saved to: {latest_path}")
             except Exception as e:
-                logger.error(f"Failed to save epoch checkpoint: {e}")
+                logger.error(f"Failed to save latest checkpoint: {e}")
+
+            # Save best checkpoint
+            if is_best:
+                best_path = successful_dir / 'checkpoint_best.pth'
+                try:
+                    torch.save(checkpoint, best_path)
+                    logger.info(f"New best model saved with val_loss: {self.best_val_loss:.4f} to: {best_path}")
+                except Exception as e:
+                    logger.error(f"Failed to save best checkpoint: {e}")
+
+            # Save epoch checkpoint
+            if (self.epoch + 1) % 10 == 0:
+                epoch_path = successful_dir / f'checkpoint_epoch_{self.epoch+1}.pth'
+                try:
+                    torch.save(checkpoint, epoch_path)
+                    logger.info(f"Epoch {self.epoch+1} checkpoint saved to: {epoch_path}")
+                except Exception as e:
+                    logger.error(f"Failed to save epoch checkpoint: {e}")
 
     def train(self):
         """Main training loop"""
@@ -1318,47 +1420,258 @@ class NuScenesTrainer:
         logger.info(f"Training samples: {len(self.train_loader.dataset)}")
         logger.info(f"Validation samples: {len(self.val_loader.dataset)}")
 
-        for epoch in range(self.config['num_epochs']):
-            self.epoch = epoch
+        try:
+            for epoch in range(self.epoch, self.config['num_epochs']):
+                self.epoch = epoch
 
-            # Train epoch
-            train_metrics = self.train_epoch()
+                # Enhanced train epoch with checkpointing
+                train_metrics = self._train_epoch_enhanced()
 
-            # Validate
-            val_metrics = self.validate()
+                # Validate
+                val_metrics = self.validate()
+                
+                # Store metrics for checkpointing
+                self.last_train_metrics = train_metrics
+                self.last_val_metrics = val_metrics
 
-            # Log epoch results
-            logger.info(
-                f"Epoch {epoch+1}/{self.config['num_epochs']} - "
-                f"Train Loss: {train_metrics['total']:.4f} - "
-                f"Val Loss: {val_metrics['total']:.4f} - "
-                f"Accuracy: {train_metrics.get('accuracy', 0):.3f} - "
-                f"LR: {self.optimizer.param_groups[0]['lr']:.6f}"
-            )
+                # Log epoch results
+                logger.info(
+                    f"Epoch {epoch+1}/{self.config['num_epochs']} - "
+                    f"Train Loss: {train_metrics['total']:.4f} - "
+                    f"Val Loss: {val_metrics['total']:.4f} - "
+                    f"Accuracy: {train_metrics.get('accuracy', 0):.3f} - "
+                    f"LR: {self.optimizer.param_groups[0]['lr']:.6f}"
+                )
 
-            # Save training stats
-            for key, value in train_metrics.items():
-                self.training_stats[f'train_{key}'].append(value)
-            for key, value in val_metrics.items():
-                self.training_stats[f'val_{key}'].append(value)
-
-            # Log to tensorboard
-            if self.writer:
+                # Save training stats
                 for key, value in train_metrics.items():
-                    self.writer.add_scalar(f'epoch_train/{key}', value, epoch)
+                    self.training_stats[f'train_{key}'].append(value)
                 for key, value in val_metrics.items():
-                    self.writer.add_scalar(f'epoch_val/{key}', value, epoch)
+                    self.training_stats[f'val_{key}'].append(value)
 
-            # Save checkpoint
-            is_best = val_metrics['total'] < self.best_val_loss
-            if is_best:
-                self.best_val_loss = val_metrics['total']
+                # Log to tensorboard
+                if self.writer:
+                    for key, value in train_metrics.items():
+                        self.writer.add_scalar(f'epoch_train/{key}', value, epoch)
+                    for key, value in val_metrics.items():
+                        self.writer.add_scalar(f'epoch_val/{key}', value, epoch)
 
-            self.save_checkpoint(is_best)
+                # Save checkpoint
+                is_best = val_metrics['total'] < self.best_val_loss
+                if is_best:
+                    self.best_val_loss = val_metrics['total']
+
+                self.save_checkpoint(is_best)
+                
+                # Reset batch step for new epoch
+                self.batch_step = 0
+                
+        except Exception as e:
+            logger.error(f"Training interrupted with error: {e}")
+            # Emergency checkpoint save
+            self.save_checkpoint(is_emergency=True)
+            raise
+        finally:
+            # Wait for any pending async checkpoint saves
+            if hasattr(self.checkpoint_manager, 'wait_for_pending_saves'):
+                self.checkpoint_manager.wait_for_pending_saves()
 
         logger.info("Training completed!")
         if self.writer:
             self.writer.close()
+
+    def _train_epoch_enhanced(self):
+        """Enhanced training epoch with sub-epoch checkpointing and error handling"""
+        self.model.train()
+        epoch_losses = defaultdict(float)
+        epoch_metrics = defaultdict(float)
+        
+        # Setup progress bar (only for main process)
+        if self.gpu_wrapper.is_main_process():
+            pbar = tqdm(self.train_loader, desc=f'Epoch {self.epoch+1} Train')
+        else:
+            pbar = self.train_loader
+
+        for batch_idx, batch in enumerate(pbar):
+            try:
+                self.batch_step = batch_idx
+                
+                # Enhanced training step with network error handling
+                losses, predictions = self._enhanced_training_step_with_checkpointing(batch, batch_idx)
+                
+                # Accumulate losses
+                for key, value in losses.items():
+                    epoch_losses[key] += value.item()
+
+                # Calculate metrics
+                metrics = self._calculate_metrics(predictions, batch)
+                for key, value in metrics.items():
+                    epoch_metrics[key] += value
+
+                # Update progress bar (only for main process)
+                if self.gpu_wrapper.is_main_process():
+                    pbar.set_postfix({'loss': f"{losses['total'].item():.4f}"})
+                
+                # Sub-epoch checkpoint saving
+                if self._should_save_checkpoint(batch_idx):
+                    if self.gpu_wrapper.is_main_process():
+                        logger.info(f"Saving sub-epoch checkpoint at batch {batch_idx}")
+                        self.save_checkpoint(is_best=False)
+
+            except Exception as e:
+                logger.error(f"Error in training step {batch_idx}: {e}")
+                
+                # Check if this is a network error
+                error_type, _ = self.network_error_handler._classify_error(e)
+                if 'connection' in error_type.value or 'network' in str(e).lower():
+                    logger.warning("Network error detected, attempting recovery...")
+                    # Emergency checkpoint
+                    self.save_checkpoint(is_emergency=True)
+                    # Let network error handler decide if we should retry
+                    raise
+                else:
+                    # Non-network error, re-raise immediately
+                    raise
+
+        # Average metrics
+        num_batches = len(self.train_loader)
+        avg_losses = {key: value / num_batches for key, value in epoch_losses.items()}
+        avg_metrics = {key: value / num_batches for key, value in epoch_metrics.items()}
+
+        return {**avg_losses, **avg_metrics}
+    
+    def _enhanced_training_step_with_checkpointing(self, batch, batch_idx):
+        """Enhanced training step with network error handling"""
+        
+        def training_operation():
+            # Move batch to device
+            batch_on_device = self._move_batch_to_device(batch)
+            
+            # Forward and backward pass
+            if self.use_mixed_precision:
+                with torch.cuda.amp.autocast():
+                    predictions = self.model(batch_on_device)
+                    base_model = self.model.module if hasattr(self.model, 'module') else self.model
+                    losses = base_model.compute_loss(predictions, batch_on_device)
+                
+                # Backward pass with gradient accumulation
+                loss = losses['total'] / self.gradient_accumulation
+                self.scaler.scale(loss).backward()
+                
+                if (batch_idx + 1) % self.gradient_accumulation == 0:
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                    self.optimizer.zero_grad()
+                    
+            else:
+                predictions = self.model(batch_on_device)
+                base_model = self.model.module if hasattr(self.model, 'module') else self.model
+                losses = base_model.compute_loss(predictions, batch_on_device)
+                
+                # Backward pass with gradient accumulation
+                loss = losses['total'] / self.gradient_accumulation
+                loss.backward()
+                
+                if (batch_idx + 1) % self.gradient_accumulation == 0:
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
+            
+            return losses, predictions
+        
+        # Use network error handler for resilient training
+        try:
+            return self.network_error_handler.handle_error(
+                None,
+                f"training_step_epoch_{self.epoch}_batch_{batch_idx}",
+                training_operation
+            )
+        except Exception as e:
+            # If network error handler fails, try once more directly
+            logger.warning(f"Network error handler failed, attempting direct execution: {e}")
+            return training_operation()
+
+    def _check_and_handle_auto_resume(self):
+        """Check for auto-resume opportunities and handle them"""
+        if not self.gpu_wrapper.is_main_process():
+            return  # Only main process handles resume
+            
+        try:
+            # Check for specific resume path first
+            if self.resume_from:
+                logger.info(f"Attempting to resume from specified checkpoint: {self.resume_from}")
+                self._load_specific_checkpoint(self.resume_from)
+                return
+            
+            # Check for auto-resume opportunity
+            if self.auto_resume:
+                resume_info = self.auto_resume_manager.detect_resume_opportunity()
+                if resume_info:
+                    self._load_from_resume_info(resume_info)
+                    return
+            
+            logger.info("No resume checkpoint found - starting fresh training")
+            
+        except Exception as e:
+            logger.warning(f"Auto-resume failed: {e}")
+            logger.info("Continuing with fresh training")
+    
+    def _load_specific_checkpoint(self, checkpoint_path: str):
+        """Load a specific checkpoint file"""
+        try:
+            checkpoint_data, metadata = self.checkpoint_manager.load_checkpoint(
+                checkpoint_path, 
+                validate=self.checkpoint_validation
+            )
+            
+            # Load model state
+            self.model.load_state_dict(checkpoint_data['model_state_dict'])
+            self.optimizer.load_state_dict(checkpoint_data['optimizer_state_dict'])
+            self.scheduler.load_state_dict(checkpoint_data['scheduler_state_dict'])
+            
+            # Restore training state
+            self.epoch = checkpoint_data['epoch']
+            self.batch_step = checkpoint_data.get('step', 0) or 0
+            self.best_val_loss = checkpoint_data.get('best_val_loss', float('inf'))
+            
+            logger.info(f"Resumed from {checkpoint_path}: epoch {self.epoch}, step {self.batch_step}")
+            
+        except Exception as e:
+            logger.error(f"Failed to load checkpoint {checkpoint_path}: {e}")
+            raise
+    
+    def _load_from_resume_info(self, resume_info: Dict[str, Any]):
+        """Load checkpoint from auto-resume information"""
+        try:
+            checkpoint_path = resume_info['checkpoint_path']
+            metadata = resume_info['metadata']
+            
+            logger.info(f"Auto-resuming from: {checkpoint_path}")
+            logger.info(f"Resume reason: {resume_info['resume_reason']}")
+            logger.info(f"Confidence score: {resume_info['confidence_score']:.2f}")
+            
+            self._load_specific_checkpoint(str(checkpoint_path))
+            
+        except Exception as e:
+            logger.error(f"Failed to load from auto-resume: {e}")
+            raise
+    
+    def _emergency_callback(self, error_event):
+        """Emergency callback for critical network errors"""
+        logger.error(f"Emergency callback triggered: {error_event.error_type.value}")
+        logger.error(f"Context: {error_event.context}")
+        logger.error(f"Error: {error_event.error_message}")
+        
+        # Attempt emergency checkpoint save
+        try:
+            logger.warning("Attempting emergency checkpoint save...")
+            self.save_checkpoint(is_emergency=True)
+            logger.info("Emergency checkpoint save completed")
+        except Exception as e:
+            logger.error(f"Emergency checkpoint save failed: {e}")
+        
+        # Log network error statistics
+        stats = self.network_error_handler.get_error_statistics()
+        logger.error(f"Network error statistics: {stats}")
 
 
 def get_enhanced_config(data_root: str = "data/nuscenes") -> Dict:
@@ -1433,6 +1746,20 @@ def main():
                         help='Gradient accumulation steps')
     parser.add_argument('--lr-scaling', type=str, default='linear', choices=['linear', 'sqrt', 'none'],
                         help='Learning rate scaling rule for multi-GPU training')
+    
+    # Enhanced checkpoint and resume arguments
+    parser.add_argument('--auto-resume', action='store_true', default=True,
+                        help='Automatically resume from latest checkpoint')
+    parser.add_argument('--checkpoint-freq', type=int, default=100,
+                        help='Save checkpoint every N batches')
+    parser.add_argument('--resume-from', type=str, 
+                        help='Specific checkpoint path to resume from')
+    parser.add_argument('--no-resume-prompt', action='store_true',
+                        help='Skip interactive resume prompts')
+    parser.add_argument('--checkpoint-validation', action='store_true', default=True,
+                        help='Validate checkpoints before loading')
+    parser.add_argument('--disable-auto-resume', action='store_true',
+                        help='Disable automatic resume detection')
 
     args = parser.parse_args()
 
@@ -1457,7 +1784,7 @@ def main():
         logger.error("Please ensure the nuScenes dataset and dependencies are properly installed.")
         return
 
-    # Create trainer with multi-GPU support
+    # Create trainer with enhanced checkpoint support
     try:
         trainer = NuScenesTrainer(
             config, 
@@ -1465,25 +1792,41 @@ def main():
             gpu_ids=args.gpus,
             distributed=args.distributed,
             gradient_accumulation=args.gradient_accumulation,
-            lr_scaling=args.lr_scaling
+            lr_scaling=args.lr_scaling,
+            # Enhanced checkpoint and resume options
+            auto_resume=args.auto_resume and not args.disable_auto_resume,
+            checkpoint_freq=args.checkpoint_freq,
+            no_resume_prompt=args.no_resume_prompt,
+            checkpoint_validation=args.checkpoint_validation,
+            resume_from=args.resume_from or args.resume  # Support both new and legacy
         )
     except Exception as e:
         logger.error(f"Failed to create trainer: {e}")
         logger.error("Please check that nuScenes dataset is available and properly configured.")
         return
 
-    # Resume if specified
-    if args.resume:
-        checkpoint = torch.load(args.resume)
-        trainer.model.load_state_dict(checkpoint['model_state_dict'])
-        trainer.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        trainer.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-        trainer.epoch = checkpoint['epoch']
-        trainer.best_val_loss = checkpoint['best_val_loss']
-        logger.info(f"Resumed training from epoch {trainer.epoch}")
-
-    # Start training
-    trainer.train()
+    # Note: Resume is now handled automatically in trainer initialization
+    
+    # Start enhanced training with network error resilience
+    try:
+        trainer.train()
+    except KeyboardInterrupt:
+        logger.info("Training interrupted by user")
+        # Save emergency checkpoint
+        try:
+            trainer.save_checkpoint(is_emergency=True)
+            logger.info("Emergency checkpoint saved")
+        except Exception as e:
+            logger.error(f"Failed to save emergency checkpoint: {e}")
+    except Exception as e:
+        logger.error(f"Training failed with error: {e}")
+        # Save emergency checkpoint
+        try:
+            trainer.save_checkpoint(is_emergency=True)
+            logger.info("Emergency checkpoint saved after error")
+        except Exception as save_e:
+            logger.error(f"Failed to save emergency checkpoint: {save_e}")
+        raise
 
 
 if __name__ == "__main__":
