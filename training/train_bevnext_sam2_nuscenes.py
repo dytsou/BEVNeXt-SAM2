@@ -1796,7 +1796,7 @@ def get_enhanced_config(data_root: str = "data/nuscenes") -> Dict:
         'use_augmentation': True,
 
         # Output
-        'output_dir': '/workspace/outputs/training_nuscenes_enhanced'
+        'output_dir': '/workspace/outputs'
     }
 
 
