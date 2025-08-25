@@ -860,7 +860,7 @@ class NuScenesTrainer:
                     checkpoint_dir=self.output_dir / 'checkpoints',
                     keep_latest=5,
                     keep_best=3,
-                    enable_compression=True,
+                    enable_compression=False,
                     async_save=True,
                     max_disk_usage_gb=20.0
                 )
