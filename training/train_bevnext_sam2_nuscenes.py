@@ -1609,21 +1609,21 @@ class NuScenesTrainer:
             
             return losses, predictions
         
-        # Use network error handler for resilient training (if available)
-        if self.network_error_handler:
-            try:
-                return self.network_error_handler.handle_error(
-                    None,
-                    f"training_step_epoch_{self.epoch}_batch_{batch_idx}",
-                    training_operation
-                )
-            except Exception as e:
-                # If network error handler fails, try once more directly
-                logger.warning(f"Network error handler failed, attempting direct execution: {e}")
-                return training_operation()
-        else:
-            # No network error handler, execute directly
+        # Execute training operation directly
+        try:
             return training_operation()
+        except Exception as e:
+            # Only use network error handler for actual network errors
+            if self.network_error_handler and ('connection' in str(e).lower() or 'network' in str(e).lower()):
+                try:
+                    return self.network_error_handler.handle_error(
+                        e,
+                        f"training_step_epoch_{self.epoch}_batch_{batch_idx}",
+                        training_operation
+                    )
+                except Exception as handler_error:
+                    logger.warning(f"Network error handler failed: {handler_error}")
+            raise e
     
     def _standard_training_step(self, batch, batch_idx):
         """Standard training step without enhanced network error handling"""

@@ -67,7 +67,7 @@ class CheckpointManager:
         keep_latest: int = 5,
         keep_best: int = 3,
         keep_epoch_interval: int = 10,
-        enable_compression: bool = True,
+        enable_compression: bool = False,
         async_save: bool = True,
         max_disk_usage_gb: float = 50.0
     ):
