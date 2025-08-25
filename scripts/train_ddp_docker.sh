@@ -20,6 +20,7 @@ CONFIG_FILE=""
 RESUME_CKPT=""
 MIXED_PRECISION=1
 DETACH=0
+GRAD_ACCUM=${GRAD_ACCUM:-1}
 
 # Enhanced checkpoint resume settings (optional)
 AUTO_RESUME=0
@@ -47,6 +48,7 @@ Options:
   --port N                  DDP master port (default: 29500)
   --no-mixed-precision      Disable AMP mixed precision
   --detach                  Run container in background (docker -d)
+  --grad-accum N            Gradient accumulation steps (default: 1)
   
   🔄 Enhanced Checkpoint Resume Options (optional):
   --auto-resume             Enable automatic resume detection
@@ -86,6 +88,7 @@ while [[ $# -gt 0 ]]; do
     --port) MASTER_PORT="$2"; shift 2;;
     --no-mixed-precision) MIXED_PRECISION=0; shift;;
     --detach) DETACH=1; shift;;
+    --grad-accum) GRAD_ACCUM="$2"; shift 2;;
     --auto-resume) AUTO_RESUME=1; shift;;
     --checkpoint-freq) CHECKPOINT_FREQ="$2"; shift 2;;
     --resume-from) RESUME_FROM="$2"; shift 2;;
@@ -162,6 +165,7 @@ TRAIN_ARGS=(
   "--lr-scaling" "linear"
 )
 [[ $MIXED_PRECISION -eq 1 ]] && TRAIN_ARGS+=("--mixed-precision")
+TRAIN_ARGS+=("--gradient-accumulation" "$GRAD_ACCUM")
 [[ -n "$CONFIG_FILE" ]] && TRAIN_ARGS+=("--config" "/workspace/bevnext-sam2/$CONFIG_FILE")
 [[ -n "$RESUME_CKPT" ]] && TRAIN_ARGS+=("--resume" "/workspace/bevnext-sam2/$RESUME_CKPT")
 
@@ -180,6 +184,7 @@ export TORCH_CUDNN_BENCHMARK=1
 export NCCL_DEBUG=WARN
 export NCCL_IB_DISABLE=1
 export CUDA_LAUNCH_BLOCKING=0
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
 
 echo "Launching torchrun with $NUM_GPUS processes..."
 torchrun --nproc_per_node=$NUM_GPUS --master_addr=127.0.0.1 --master_port=$MASTER_PORT \
@@ -197,6 +202,7 @@ DOCKER_CMD=(
   -e CUDA_VISIBLE_DEVICES="$GPU_IDS"
   -e NUSCENES_DATA_ROOT=/workspace/data/nuscenes
   -e PYTHONPATH=/workspace/bevnext-sam2
+  -e PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
   -v "$ABS_PROJECT_PATH":/workspace/bevnext-sam2
   -v "$ABS_DATA_PATH":/workspace/data/nuscenes:ro
   -v "$ABS_OUTPUTS_PATH":/workspace/outputs

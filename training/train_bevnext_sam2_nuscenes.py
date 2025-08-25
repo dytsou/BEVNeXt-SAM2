@@ -1305,6 +1305,8 @@ class NuScenesTrainer:
             target_cls_valid = target_cls.flatten()[valid_mask]
 
             pred_labels = pred_cls_valid.argmax(dim=-1)
+            # Ensure both tensors are on the same device
+            target_cls_valid = target_cls_valid.to(pred_labels.device)
             accuracy = (pred_labels == target_cls_valid).float().mean()
             metrics['accuracy'] = accuracy.item()
         else:
