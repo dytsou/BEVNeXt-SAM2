@@ -780,26 +780,26 @@ class Trainer:
             self.logger.info("Falling back to basic checkpoint save...")
             
             # Fallback to basic checkpoint save
-            checkpoint = {
-                'epoch': self.epoch,
-                'model_state_dict': self.model.state_dict(),
-                'optimizer_state_dict': self.optimizer.state_dict(),
-                'scheduler_state_dict': self.scheduler.state_dict(),
-                'best_val_loss': self.best_val_loss,
+        checkpoint = {
+            'epoch': self.epoch,
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'scheduler_state_dict': self.scheduler.state_dict(),
+            'best_val_loss': self.best_val_loss,
                 'config': self.config,
                 'training_stats': dict(self.training_stats),
                 'batch_step': getattr(self, 'batch_step', 0)
-            }
-            
-            # Save latest checkpoint
-            checkpoint_path = self.output_dir / 'checkpoint_latest.pth'
-            torch.save(checkpoint, checkpoint_path)
-            
-            # Save best checkpoint
-            if is_best:
-                best_checkpoint_path = self.output_dir / 'checkpoint_best.pth'
-                torch.save(checkpoint, best_checkpoint_path)
-                self.logger.info(f"New best model saved with val_loss: {self.best_val_loss:.4f}")
+        }
+        
+        # Save latest checkpoint
+        checkpoint_path = self.output_dir / 'checkpoint_latest.pth'
+        torch.save(checkpoint, checkpoint_path)
+        
+        # Save best checkpoint
+        if is_best:
+            best_checkpoint_path = self.output_dir / 'checkpoint_best.pth'
+            torch.save(checkpoint, best_checkpoint_path)
+            self.logger.info(f"New best model saved with val_loss: {self.best_val_loss:.4f}")
     
     def train(self):
         """Main training loop"""
@@ -807,7 +807,17 @@ class Trainer:
         self.logger.info(f"Device: {self.device}")
         self.logger.info(f"Model parameters: {sum(p.numel() for p in self.model.parameters()):,}")
         
-        for epoch in range(self.config['num_epochs']):
+        # Determine starting epoch (for resume functionality)
+        # Note: self.epoch from checkpoint represents the epoch to continue from
+        start_epoch = self.epoch  # Will be > 0 if resumed from checkpoint
+        end_epoch = self.config['num_epochs']
+        
+        if start_epoch > 0:
+            self.logger.info(f"Resuming training from epoch {start_epoch + 1}")
+        else:
+            self.logger.info(f"Starting fresh training")
+        
+        for epoch in range(start_epoch, end_epoch):
             self.epoch = epoch
             
             # Train epoch
