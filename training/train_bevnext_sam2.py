@@ -24,6 +24,7 @@ from torch.utils.checkpoint import checkpoint
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from collections import defaultdict
 
 # Add project root to path
 sys.path.insert(0, '/workspace/bevnext-sam2')
@@ -433,6 +434,8 @@ class Trainer:
         # Training state
         self.epoch = 0
         self.best_val_loss = float('inf')
+        self.batch_step = 0
+        self.training_stats = defaultdict(list)
         
         # Log setup information
         if self.gpu_wrapper.is_main_process():
@@ -736,25 +739,67 @@ class Trainer:
         return {'avg_loss': avg_loss, **loss_components}
     
     def save_checkpoint(self, is_best: bool = False):
-        """Save model checkpoint"""
-        checkpoint = {
-            'epoch': self.epoch,
-            'model_state_dict': self.model.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'scheduler_state_dict': self.scheduler.state_dict(),
-            'best_val_loss': self.best_val_loss,
-            'config': self.config
-        }
-        
-        # Save latest checkpoint
-        checkpoint_path = self.output_dir / 'checkpoint_latest.pth'
-        torch.save(checkpoint, checkpoint_path)
-        
-        # Save best checkpoint
-        if is_best:
-            best_checkpoint_path = self.output_dir / 'checkpoint_best.pth'
-            torch.save(checkpoint, best_checkpoint_path)
-            self.logger.info(f"New best model saved with val_loss: {self.best_val_loss:.4f}")
+        """Save model checkpoint using enhanced checkpoint system"""
+        try:
+            # Import enhanced resume manager for checkpoint creation
+            from training.enhanced_resume import create_enhanced_resume_manager
+            
+            # Create resume manager for enhanced checkpoint creation
+            resume_manager = create_enhanced_resume_manager(
+                model=self.model,
+                optimizer=self.optimizer,
+                scheduler=self.scheduler,
+                device=self.device,
+                output_dir=self.output_dir,
+                scaler=getattr(self, 'scaler', None),
+                config=self.config
+            )
+            
+            # Update resume manager state
+            resume_manager.epoch = self.epoch
+            resume_manager.best_val_loss = self.best_val_loss
+            resume_manager.training_stats = self.training_stats
+            resume_manager.batch_step = getattr(self, 'batch_step', 0)
+            
+            # Create enhanced checkpoint
+            checkpoint = resume_manager.create_enhanced_checkpoint()
+            
+            # Save latest checkpoint
+            checkpoint_path = self.output_dir / 'checkpoint_latest.pth'
+            torch.save(checkpoint, checkpoint_path)
+            self.logger.info(f"Enhanced checkpoint saved: {checkpoint_path}")
+            
+            # Save best checkpoint
+            if is_best:
+                best_checkpoint_path = self.output_dir / 'checkpoint_best.pth'
+                torch.save(checkpoint, best_checkpoint_path)
+                self.logger.info(f"New best model saved with val_loss: {self.best_val_loss:.4f}")
+                
+        except Exception as e:
+            self.logger.warning(f"Enhanced checkpoint save failed: {e}")
+            self.logger.info("Falling back to basic checkpoint save...")
+            
+            # Fallback to basic checkpoint save
+            checkpoint = {
+                'epoch': self.epoch,
+                'model_state_dict': self.model.state_dict(),
+                'optimizer_state_dict': self.optimizer.state_dict(),
+                'scheduler_state_dict': self.scheduler.state_dict(),
+                'best_val_loss': self.best_val_loss,
+                'config': self.config,
+                'training_stats': dict(self.training_stats),
+                'batch_step': getattr(self, 'batch_step', 0)
+            }
+            
+            # Save latest checkpoint
+            checkpoint_path = self.output_dir / 'checkpoint_latest.pth'
+            torch.save(checkpoint, checkpoint_path)
+            
+            # Save best checkpoint
+            if is_best:
+                best_checkpoint_path = self.output_dir / 'checkpoint_best.pth'
+                torch.save(checkpoint, best_checkpoint_path)
+                self.logger.info(f"New best model saved with val_loss: {self.best_val_loss:.4f}")
     
     def train(self):
         """Main training loop"""
@@ -1026,6 +1071,7 @@ def main():
     parser = argparse.ArgumentParser(description='Train BEVNeXt-SAM2 Model')
     parser.add_argument('--config', type=str, help='Path to config file')
     parser.add_argument('--resume', type=str, help='Path to checkpoint to resume from')
+    parser.add_argument('--auto-resume', action='store_true', help='Automatically resume from latest checkpoint if available')
     parser.add_argument('--mixed-precision', action='store_true', help='Enable mixed precision training')
     parser.add_argument('--force-config', action='store_true', help='Force use of config file instead of auto-detection')
     
@@ -1096,15 +1142,89 @@ def main():
         lr_scaling=args.lr_scaling
     )
     
-    # Resume if specified
-    if args.resume:
-        checkpoint = torch.load(args.resume)
-        trainer.model.load_state_dict(checkpoint['model_state_dict'])
-        trainer.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        trainer.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-        trainer.epoch = checkpoint['epoch']
-        trainer.best_val_loss = checkpoint['best_val_loss']
-        print(f"Resumed training from epoch {trainer.epoch}")
+    # Auto-resume functionality
+    if args.auto_resume and not args.resume:
+        from training.enhanced_resume import create_enhanced_resume_manager
+        
+        print("🔍 Searching for resumable checkpoints...")
+        # Create enhanced resume manager for auto-resume
+        resume_manager = create_enhanced_resume_manager(
+            model=trainer.model,
+            optimizer=trainer.optimizer,
+            scheduler=trainer.scheduler,
+            device=trainer.device,
+            output_dir=trainer.output_dir,
+            scaler=getattr(trainer, 'scaler', None),
+            config=config,
+            strict_config_check=False,  # Allow flexibility for auto-resume
+            allow_partial_load=True
+        )
+        
+        # Attempt auto-resume
+        result = resume_manager.auto_resume()
+        
+        if result.success:
+            print(f"✅ Auto-resume successful!")
+            print(f"   📁 Checkpoint: {result.checkpoint_path.name}")
+            print(f"   📊 Restored to epoch: {result.restored_epoch}")
+            print(f"   📈 Batch step: {result.restored_step}")
+            
+            # Update trainer state from resume manager
+            trainer.epoch = resume_manager.epoch
+            trainer.best_val_loss = resume_manager.best_val_loss
+            trainer.training_stats = resume_manager.training_stats
+            trainer.batch_step = getattr(resume_manager, 'batch_step', 0)
+            
+            if result.warnings:
+                print(f"   ⚠️  Auto-resume completed with warnings:")
+                for warning in result.warnings:
+                    print(f"      - {warning}")
+        else:
+            print(f"🔄 Auto-resume not possible: {result.message}")
+            print("🆕 Starting fresh training...")
+    
+    # Enhanced resume functionality
+    elif args.resume:
+        from training.enhanced_resume import create_enhanced_resume_manager
+        
+        # Create enhanced resume manager
+        resume_manager = create_enhanced_resume_manager(
+            model=trainer.model,
+            optimizer=trainer.optimizer,
+            scheduler=trainer.scheduler,
+            device=trainer.device,
+            output_dir=trainer.output_dir,
+            scaler=getattr(trainer, 'scaler', None),
+            config=config,
+            strict_config_check=False,  # Allow flexibility for resume
+            allow_partial_load=True
+        )
+        
+        # Attempt to resume from specified checkpoint
+        print(f"Attempting to resume from: {args.resume}")
+        result = resume_manager.resume_from_checkpoint(args.resume)
+        
+        if result.success:
+            print(f"Resume successful!")
+            print(f"   Restored to epoch: {result.restored_epoch}")
+            print(f"       Batch step: {result.restored_step}")
+            
+            # Update trainer state from resume manager
+            trainer.epoch = resume_manager.epoch
+            trainer.best_val_loss = resume_manager.best_val_loss
+            trainer.training_stats = resume_manager.training_stats
+            trainer.batch_step = getattr(resume_manager, 'batch_step', 0)
+            
+            if result.warnings:
+                print(f"   ⚠️  Resume completed with warnings:")
+                for warning in result.warnings:
+                    print(f"      - {warning}")
+        else:
+            print(f"❌ Resume failed: {result.message}")
+            print("🔄 Starting fresh training instead...")
+            if result.warnings:
+                for warning in result.warnings:
+                    print(f"   ⚠️  {warning}")
     
     # Start training
     trainer.train()
