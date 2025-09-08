@@ -69,8 +69,13 @@ def plot_curve(log_dicts, args):
                             min(epochs) % args.interval
                 xs = np.arange(x0, max(epochs) + 1, args.interval)
                 ys = []
+                resume_points = []  # Track resume points for marking
+                
                 for epoch in epochs[args.interval - 1::args.interval]:
                     ys += log_dict[epoch][metric]
+                    # Check if this epoch was resumed
+                    if '_resumed' in log_dict[epoch]:
+                        resume_points.append(epoch)
 
                 # if training is aborted before eval of the last epoch
                 # `xs` and `ys` will have different length and cause an error
@@ -81,24 +86,80 @@ def plot_curve(log_dicts, args):
                 ax = plt.gca()
                 ax.set_xticks(xs)
                 plt.xlabel('epoch')
-                plt.plot(xs, ys, label=legend[i * num_metrics + j], marker='o')
+                
+                # Plot main curve
+                line = plt.plot(xs, ys, label=legend[i * num_metrics + j], marker='o')[0]
+                
+                # Mark resume points with different markers
+                if resume_points:
+                    resume_xs = [x for x in xs if x in resume_points]
+                    resume_ys = [ys[list(xs).index(x)] for x in resume_xs if x in xs]
+                    plt.scatter(resume_xs, resume_ys, marker='s', s=100, 
+                              color=line.get_color(), alpha=0.7, 
+                              label=f'{legend[i * num_metrics + j]} (resumed)', 
+                              edgecolors='black', linewidth=2)
+                    
             else:
                 xs = []
                 ys = []
-                num_iters_per_epoch = \
-                    log_dict[epochs[args.interval-1]]['iter'][-1]
-                for epoch in epochs[args.interval - 1::args.interval]:
-                    iters = log_dict[epoch]['iter']
-                    if log_dict[epoch]['mode'][-1] == 'val':
-                        iters = iters[:-1]
-                    xs.append(
-                        np.array(iters) + (epoch - 1) * num_iters_per_epoch)
-                    ys.append(np.array(log_dict[epoch][metric][:len(iters)]))
-                xs = np.concatenate(xs)
-                ys = np.concatenate(ys)
-                plt.xlabel('iter')
-                plt.plot(
-                    xs, ys, label=legend[i * num_metrics + j], linewidth=0.5)
+                resume_points = []
+                
+                # Use global_step if available for better x-axis
+                use_global_step = 'global_step' in log_dict[epochs[0]]
+                
+                if use_global_step:
+                    # Plot using global steps for accurate resume tracking
+                    for epoch in epochs[args.interval - 1::args.interval]:
+                        global_steps = log_dict[epoch].get('global_step', [])
+                        metric_values = log_dict[epoch][metric]
+                        
+                        if len(global_steps) == len(metric_values):
+                            xs.extend(global_steps)
+                            ys.extend(metric_values)
+                        
+                        # Mark resume points
+                        if '_resumed' in log_dict[epoch]:
+                            resume_points.extend(global_steps[:1])  # First step of resumed epoch
+                    
+                    plt.xlabel('global step')
+                    
+                else:
+                    # Fallback to original iteration-based plotting
+                    num_iters_per_epoch = \
+                        log_dict[epochs[args.interval-1]]['iter'][-1]
+                    for epoch in epochs[args.interval - 1::args.interval]:
+                        iters = log_dict[epoch]['iter']
+                        if log_dict[epoch]['mode'][-1] == 'val':
+                            iters = iters[:-1]
+                        epoch_xs = np.array(iters) + (epoch - 1) * num_iters_per_epoch
+                        xs.append(epoch_xs)
+                        ys.append(np.array(log_dict[epoch][metric][:len(iters)]))
+                        
+                        # Mark resume points
+                        if '_resumed' in log_dict[epoch]:
+                            resume_points.extend([epoch_xs[0]])  # First iteration of resumed epoch
+                    
+                    xs = np.concatenate(xs)
+                    ys = np.concatenate(ys)
+                    plt.xlabel('iter')
+                
+                # Plot main curve
+                line = plt.plot(xs, ys, label=legend[i * num_metrics + j], linewidth=0.5)[0]
+                
+                # Mark resume points
+                if resume_points:
+                    # Find corresponding y values for resume points
+                    resume_ys = []
+                    for resume_x in resume_points:
+                        # Find closest x value
+                        closest_idx = np.argmin(np.abs(np.array(xs) - resume_x))
+                        resume_ys.append(ys[closest_idx])
+                    
+                    plt.scatter(resume_points, resume_ys, marker='v', s=80, 
+                              color=line.get_color(), alpha=0.8, 
+                              label=f'{legend[i * num_metrics + j]} (resumed)', 
+                              edgecolors='black', linewidth=1)
+                    
             plt.legend()
         if args.title is not None:
             plt.title(args.title)
@@ -171,18 +232,39 @@ def load_json_logs(json_logs):
     # keys of sub dict is different metrics, e.g. memory, bbox_mAP
     # value of sub dict is a list of corresponding values of all iterations
     log_dicts = [dict() for _ in json_logs]
+    
     for json_log, log_dict in zip(json_logs, log_dicts):
+        resume_detected = False
+        last_global_step = 0
+        
         with open(json_log, 'r') as log_file:
             for line in log_file:
                 log = json.loads(line.strip())
+                
                 # skip lines without `epoch` field
                 if 'epoch' not in log:
                     continue
+                
                 epoch = log.pop('epoch')
+                
+                # Detect resume by checking for step discontinuity
+                current_global_step = log.get('global_step', log.get('step', 0))
+                if current_global_step < last_global_step:
+                    resume_detected = True
+                    print(f"Resume detected in {json_log} at epoch {epoch} (step {current_global_step} < {last_global_step})")
+                
+                last_global_step = current_global_step
+                
                 if epoch not in log_dict:
                     log_dict[epoch] = defaultdict(list)
+                    # Mark if this epoch started from a resume
+                    if resume_detected:
+                        log_dict[epoch]['_resumed'] = [True]
+                        resume_detected = False  # Reset flag
+                
                 for k, v in log.items():
                     log_dict[epoch][k].append(v)
+    
     return log_dicts
 
 

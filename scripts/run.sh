@@ -64,11 +64,17 @@ print_help() {
     echo "  --checkpoint PATH  - Path to model checkpoint for validation"
     echo "  --epochs N         - Number of training epochs"
     echo "  --batch-size N     - Training batch size"
+    echo "  --auto-resume      - Automatically resume from latest checkpoint"
+    echo "  --resume PATH      - Resume from specific checkpoint"
+    echo "  --no-resume        - Force fresh training (ignore checkpoints)"
+    echo "  --checkpoint-freq N - Save checkpoint every N steps (default: 1000)"
     echo "  --dry-run          - Show commands without executing"
     echo ""
     echo "Examples:"
     echo "  $0 build-fast --gpu"
     echo "  $0 train --data-path /data/nuscenes --gpu --epochs 50"
+    echo "  $0 train --data-path /data/nuscenes --gpu --auto-resume"
+    echo "  $0 train --data-path /data/nuscenes --gpu --resume outputs/checkpoint_latest.pth"
     echo "  $0 train-multi-gpu --data-path /data/nuscenes --gpu --epochs 50"
     echo "  $0 validate --checkpoint outputs/checkpoints/latest.pth --gpu"
     echo "  $0 dev --data-path /data/nuscenes --gpu --jupyter"
@@ -111,6 +117,10 @@ CHECKPOINT_PATH=""
 NUM_EPOCHS=""
 BATCH_SIZE=""
 EXTRA_PORTS=""
+AUTO_RESUME=false
+RESUME_PATH=""
+NO_RESUME=false
+CHECKPOINT_FREQ=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -148,6 +158,22 @@ while [[ $# -gt 0 ]]; do
             ;;
         --batch-size)
             BATCH_SIZE="$2"
+            shift 2
+            ;;
+        --auto-resume)
+            AUTO_RESUME=true
+            shift
+            ;;
+        --resume)
+            RESUME_PATH="$2"
+            shift 2
+            ;;
+        --no-resume)
+            NO_RESUME=true
+            shift
+            ;;
+        --checkpoint-freq)
+            CHECKPOINT_FREQ="$2"
             shift 2
             ;;
         --dry-run)
@@ -279,6 +305,23 @@ case $MODE in
             TRAIN_CMD="$TRAIN_CMD --batch-size $BATCH_SIZE"
         fi
         
+        # Add resume options
+        if [[ "$AUTO_RESUME" == true ]]; then
+            TRAIN_CMD="$TRAIN_CMD --auto-resume"
+        fi
+        
+        if [[ -n "$RESUME_PATH" ]]; then
+            TRAIN_CMD="$TRAIN_CMD --resume $RESUME_PATH"
+        fi
+        
+        if [[ "$NO_RESUME" == true ]]; then
+            TRAIN_CMD="$TRAIN_CMD --no-resume"
+        fi
+        
+        if [[ -n "$CHECKPOINT_FREQ" ]]; then
+            TRAIN_CMD="$TRAIN_CMD --checkpoint-freq $CHECKPOINT_FREQ"
+        fi
+        
         TRAIN_CMD="$TRAIN_CMD --mixed-precision"
         
         DOCKER_CMD=$(build_docker_cmd)
@@ -331,6 +374,23 @@ case $MODE in
         
         if [[ -n "$BATCH_SIZE" ]]; then
             TRAIN_CMD="$TRAIN_CMD --batch-size $BATCH_SIZE"
+        fi
+        
+        # Add resume options
+        if [[ "$AUTO_RESUME" == true ]]; then
+            TRAIN_CMD="$TRAIN_CMD --auto-resume"
+        fi
+        
+        if [[ -n "$RESUME_PATH" ]]; then
+            TRAIN_CMD="$TRAIN_CMD --resume $RESUME_PATH"
+        fi
+        
+        if [[ "$NO_RESUME" == true ]]; then
+            TRAIN_CMD="$TRAIN_CMD --no-resume"
+        fi
+        
+        if [[ -n "$CHECKPOINT_FREQ" ]]; then
+            TRAIN_CMD="$TRAIN_CMD --checkpoint-freq $CHECKPOINT_FREQ"
         fi
         
         TRAIN_CMD="$TRAIN_CMD --mixed-precision"

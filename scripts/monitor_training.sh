@@ -53,11 +53,62 @@ if [ -d "outputs/training" ]; then
     if [ -f "outputs/training/checkpoint_latest.pth" ]; then
         echo -e "${GREEN}✓ Latest checkpoint found${NC}"
         echo -e "  Size: $(du -h outputs/training/checkpoint_latest.pth | cut -f1)"
+        
+        # Try to extract checkpoint info (requires Python)
+        if command -v python3 &> /dev/null; then
+            echo -e "  Info: $(python3 -c "
+import torch, sys
+try:
+    ckpt = torch.load('outputs/training/checkpoint_latest.pth', map_location='cpu')
+    epoch = ckpt.get('epoch', 'unknown')
+    global_step = ckpt.get('global_step', ckpt.get('step', ckpt.get('batch_step', 'unknown')))
+    timestamp = ckpt.get('timestamp', 'unknown')
+    print(f'Epoch {epoch}, Step {global_step}, Saved: {timestamp[:19] if isinstance(timestamp, str) else timestamp}')
+except:
+    print('Could not read checkpoint info')
+" 2>/dev/null || echo "Could not read checkpoint info")"
+        fi
     fi
     
     if [ -f "outputs/training/checkpoint_best.pth" ]; then
         echo -e "${GREEN}✓ Best checkpoint found${NC}"
         echo -e "  Size: $(du -h outputs/training/checkpoint_best.pth | cut -f1)"
+        
+        # Try to extract best checkpoint info
+        if command -v python3 &> /dev/null; then
+            echo -e "  Info: $(python3 -c "
+import torch, sys
+try:
+    ckpt = torch.load('outputs/training/checkpoint_best.pth', map_location='cpu')
+    epoch = ckpt.get('epoch', 'unknown')
+    val_loss = ckpt.get('best_val_loss', ckpt.get('val_loss', 'unknown'))
+    print(f'Epoch {epoch}, Val Loss: {val_loss}')
+except:
+    print('Could not read checkpoint info')
+" 2>/dev/null || echo "Could not read checkpoint info")"
+        fi
+    fi
+    
+    # Check for enhanced checkpoint metadata
+    if [ -f "outputs/training/checkpoint_metadata.json" ]; then
+        echo -e "${GREEN}✓ Checkpoint metadata found${NC}"
+        if command -v python3 &> /dev/null; then
+            echo -e "  Enhanced checkpoints: $(python3 -c "
+import json
+try:
+    with open('outputs/training/checkpoint_metadata.json', 'r') as f:
+        metadata = json.load(f)
+    print(f'{len(metadata)} checkpoints tracked')
+except:
+    print('Could not read metadata')
+" 2>/dev/null || echo "Could not read metadata")"
+        fi
+    fi
+    
+    # List all checkpoint files
+    CHECKPOINT_COUNT=$(find outputs/training -name "checkpoint_*.pth*" 2>/dev/null | wc -l)
+    if [ "$CHECKPOINT_COUNT" -gt 2 ]; then
+        echo -e "${GREEN}✓ $CHECKPOINT_COUNT total checkpoint files found${NC}"
     fi
     
     # Check for training log
@@ -90,4 +141,6 @@ echo -e "\n${YELLOW}Useful Commands:${NC}"
 echo -e "  Monitor live logs:    docker logs -f \$(docker ps --filter ancestor=bevnext-sam2:latest --format \"{{.ID}}\" | head -1)"
 echo -e "  Stop training:        docker stop \$(docker ps --filter ancestor=bevnext-sam2:latest --format \"{{.ID}}\" | head -1)"
 echo -e "  View tensorboard:     tensorboard --logdir outputs/training/tensorboard"
-echo -e "  Resume training:      ./scripts/train.sh --resume outputs/training/checkpoint_latest.pth"
+echo -e "  Resume training:      ./scripts/run.sh train --auto-resume"
+echo -e "  Resume from specific: ./scripts/run.sh train --resume outputs/training/checkpoint_latest.pth"
+echo -e "  Fresh training:       ./scripts/run.sh train --no-resume"
