@@ -25,6 +25,10 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 ABS_PROJECT_PATH="$(realpath "$PROJECT_ROOT")"
 ABS_OUTPUTS_PATH="$(realpath "$PROJECT_ROOT/outputs" 2>/dev/null || echo "$PROJECT_ROOT/outputs")"
 ABS_LOGS_PATH="$(realpath "$PROJECT_ROOT/logs" 2>/dev/null || echo "$PROJECT_ROOT/logs")"
+ABS_CHECKPOINTS_PATH="$(realpath "$PROJECT_ROOT/outputs/checkpoints" 2>/dev/null || echo "$PROJECT_ROOT/outputs/checkpoints")"
+
+# Ensure required directories exist
+mkdir -p "$ABS_OUTPUTS_PATH/checkpoints" "$ABS_OUTPUTS_PATH/training" "$ABS_OUTPUTS_PATH/evaluation" "$ABS_LOGS_PATH"
 
 # Docker options
 DOCKER_OPTS="--rm -it --user $(id -u):$(id -g)"
@@ -226,7 +230,11 @@ build_docker_cmd() {
     local cmd="docker run $DOCKER_OPTS"
     cmd="$cmd --name $CONTAINER_NAME"
     cmd="$cmd -v $ABS_PROJECT_PATH:/workspace/bevnext-sam2"
+    # Enhanced volume mounts for checkpoints and outputs
     cmd="$cmd -v $ABS_OUTPUTS_PATH:/workspace/outputs"
+    cmd="$cmd -v $ABS_CHECKPOINTS_PATH:/workspace/outputs/checkpoints"
+    cmd="$cmd -v $ABS_OUTPUTS_PATH/training:/workspace/outputs/training"
+    cmd="$cmd -v $ABS_OUTPUTS_PATH/evaluation:/workspace/outputs/evaluation"
     cmd="$cmd -v $ABS_LOGS_PATH:/workspace/logs"
     cmd="$cmd -w /workspace/bevnext-sam2"
     

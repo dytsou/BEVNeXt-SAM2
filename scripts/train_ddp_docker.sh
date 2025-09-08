@@ -133,12 +133,23 @@ fi
 ABS_OUTPUTS_PATH="$(mkdir -p "$PROJECT_ROOT/$OUTPUT_DIR" && realpath "$PROJECT_ROOT/$OUTPUT_DIR")"
 ABS_LOGS_PATH="$(mkdir -p "$PROJECT_ROOT/logs" && realpath "$PROJECT_ROOT/logs")"
 
+# Initialize checkpoint and output subdirectories with proper permissions
+ABS_CHECKPOINTS_PATH="$(mkdir -p "$ABS_OUTPUTS_PATH/checkpoints" && realpath "$ABS_OUTPUTS_PATH/checkpoints")"
+ABS_TRAINING_PATH="$(mkdir -p "$ABS_OUTPUTS_PATH/training" && realpath "$ABS_OUTPUTS_PATH/training")"
+ABS_EVAL_PATH="$(mkdir -p "$ABS_OUTPUTS_PATH/evaluation" && realpath "$ABS_OUTPUTS_PATH/evaluation")"
+
+# Ensure proper permissions for Docker container access
+chmod -R 755 "$ABS_OUTPUTS_PATH" "$ABS_LOGS_PATH" 2>/dev/null || true
+
 echo "======================================"
 echo "BEVNeXt-SAM2 Docker DDP Training"
 echo "======================================"
 echo "GPUs:            $GPU_IDS ($NUM_GPUS)"
 echo "Data root:       $ABS_DATA_PATH"
 echo "Output dir:      $ABS_OUTPUTS_PATH"
+echo "Checkpoints:     $ABS_CHECKPOINTS_PATH"
+echo "Training logs:   $ABS_TRAINING_PATH" 
+echo "Evaluation:      $ABS_EVAL_PATH"
 echo "Epochs:          $EPOCHS"
 echo "Per-GPU batch:   $BATCH_SIZE"
 echo "Mixed precision: $([[ $MIXED_PRECISION -eq 1 ]] && echo on || echo off)"
@@ -205,7 +216,11 @@ DOCKER_CMD=(
   -e PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
   -v "$ABS_PROJECT_PATH":/workspace/bevnext-sam2
   -v "$ABS_DATA_PATH":/workspace/data/nuscenes:ro
+  # Enhanced volume mounts for proper checkpoint persistence
   -v "$ABS_OUTPUTS_PATH":/workspace/outputs
+  -v "$ABS_CHECKPOINTS_PATH":/workspace/outputs/checkpoints
+  -v "$ABS_TRAINING_PATH":/workspace/outputs/training
+  -v "$ABS_EVAL_PATH":/workspace/outputs/evaluation
   -v "$ABS_LOGS_PATH":/workspace/logs
   -w /workspace/bevnext-sam2
   "$IMAGE_NAME"
@@ -225,6 +240,13 @@ if [[ $DETACH -eq 1 ]]; then
 else
   echo "  scripts/monitor_training.sh"
 fi
+
+echo ""
+echo "📁 Checkpoint Locations:"
+echo "  Host checkpoints:     $ABS_CHECKPOINTS_PATH/"
+echo "  Container checkpoints: /workspace/outputs/checkpoints/"
+echo "  Training outputs:     $ABS_TRAINING_PATH/"
+echo "  Evaluation results:   $ABS_EVAL_PATH/"
 
 echo ""
 if [[ $AUTO_RESUME -eq 1 ]] || [[ -n "$RESUME_FROM" ]] || [[ -n "$CHECKPOINT_FREQ" ]]; then

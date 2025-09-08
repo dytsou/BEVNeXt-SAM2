@@ -9,13 +9,18 @@ services:
     volumes:
       # Mount your local nuScenes dataset (UPDATE PATH)
       - /path/to/your/nuscenes:/workspace/data/nuscenes:ro
-      # Mount outputs to persist results
+      # Mount outputs to persist results - with proper checkpoint subdirs
       - ./outputs:/workspace/outputs
+      - ./outputs/checkpoints:/workspace/outputs/checkpoints
+      - ./outputs/training:/workspace/outputs/training
+      - ./outputs/evaluation:/workspace/outputs/evaluation
       # Optional: mount config overrides
       - ./configs:/workspace/configs:ro
+      # Mount logs directory
+      - ./logs:/workspace/logs
     ports:
-      - "8888:8888"  # Jupyter
-      - "6006:6006"  # TensorBoard
+      - "8888:8888" # Jupyter
+      - "6006:6006" # TensorBoard
     environment:
       - NUSCENES_DATA_ROOT=/workspace/data/nuscenes
       - PYTHONPATH=/workspace/bevnext-sam2
@@ -25,9 +30,9 @@ services:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [gpu]
+              capabilities: [ gpu ]
     command: bash
-    
+
   # Service with persistent volume for downloaded data
   bevnext-sam2-download:
     build: .
@@ -36,9 +41,14 @@ services:
     volumes:
       # Persistent volume for downloaded dataset
       - nuscenes_data:/workspace/data/nuscenes
+      # Enhanced output volume mounts
       - ./outputs:/workspace/outputs
+      - ./outputs/checkpoints:/workspace/outputs/checkpoints
+      - ./outputs/training:/workspace/outputs/training
+      - ./outputs/evaluation:/workspace/outputs/evaluation
+      - ./logs:/workspace/logs
     ports:
-      - "8889:8888"  # Different port to avoid conflicts
+      - "8889:8888" # Different port to avoid conflicts
       - "6007:6006"
     environment:
       - NUSCENES_DATA_ROOT=/workspace/data/nuscenes
@@ -50,7 +60,7 @@ services:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [gpu]
+              capabilities: [ gpu ]
     command: bash
 
   # Service for Jupyter development
@@ -60,8 +70,13 @@ services:
     container_name: bevnext-sam2-jupyter
     volumes:
       - /path/to/your/nuscenes:/workspace/data/nuscenes:ro
+      # Enhanced output volume mounts for Jupyter access
       - ./outputs:/workspace/outputs
-      - ./notebooks:/workspace/notebooks  # Mount notebook directory
+      - ./outputs/checkpoints:/workspace/outputs/checkpoints
+      - ./outputs/training:/workspace/outputs/training
+      - ./outputs/evaluation:/workspace/outputs/evaluation
+      - ./notebooks:/workspace/notebooks # Mount notebook directory
+      - ./logs:/workspace/logs
     ports:
       - "8888:8888"
       - "6006:6006"
@@ -74,7 +89,7 @@ services:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [gpu]
+              capabilities: [ gpu ]
     command: >
       bash -c "mkdir -p /workspace/notebooks && 
                jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root 
@@ -87,10 +102,16 @@ services:
     container_name: bevnext-sam2-training
     volumes:
       - /path/to/your/nuscenes:/workspace/data/nuscenes:ro
+      # Comprehensive checkpoint and output mounting
       - ./outputs:/workspace/outputs
+      - ./outputs/checkpoints:/workspace/outputs/checkpoints
+      - ./outputs/training:/workspace/outputs/training
+      - ./outputs/evaluation:/workspace/outputs/evaluation
+      # Legacy checkpoint directory (for compatibility)
       - ./checkpoints:/workspace/checkpoints
+      - ./logs:/workspace/logs
     ports:
-      - "6006:6006"  # Only TensorBoard for training monitoring
+      - "6006:6006" # Only TensorBoard for training monitoring
     environment:
       - NUSCENES_DATA_ROOT=/workspace/data/nuscenes
       - PYTHONPATH=/workspace/bevnext-sam2
@@ -100,7 +121,7 @@ services:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [gpu]
+              capabilities: [ gpu ]
     command: python training/train_bevnext_sam2_nuscenes.py --data-root /workspace/data/nuscenes
 
   # Service for evaluation only
@@ -110,8 +131,14 @@ services:
     container_name: bevnext-sam2-eval
     volumes:
       - /path/to/your/nuscenes:/workspace/data/nuscenes:ro
+      # Enhanced volume mounts for evaluation
       - ./outputs:/workspace/outputs
+      - ./outputs/checkpoints:/workspace/outputs/checkpoints
+      - ./outputs/training:/workspace/outputs/training
+      - ./outputs/evaluation:/workspace/outputs/evaluation
+      # Legacy checkpoint directory (for compatibility)
       - ./checkpoints:/workspace/checkpoints
+      - ./logs:/workspace/logs
     environment:
       - NUSCENES_DATA_ROOT=/workspace/data/nuscenes
       - PYTHONPATH=/workspace/bevnext-sam2
@@ -121,10 +148,10 @@ services:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [gpu]
+              capabilities: [ gpu ]
     command: bash -c "scripts/run.sh eval"
 
 volumes:
   # Persistent volume for downloaded nuScenes data
   nuscenes_data:
-    driver: local 
+    driver: local
