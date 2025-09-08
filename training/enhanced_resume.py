@@ -23,8 +23,8 @@ import time
 import logging
 import warnings
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Any, Union
 from datetime import datetime
+from typing import Dict, List, Tuple, Optional, Any, Union
 from dataclasses import dataclass
 
 import torch
@@ -121,16 +121,89 @@ class EnhancedResumeManager:
             found_checkpoints.extend(self.output_dir.glob(pattern))
             found_checkpoints.extend(self.output_dir.glob(f'**/{pattern}'))
         
-        # Remove duplicates and sort by modification time (newest first)
+        # Remove duplicates
         unique_checkpoints = list(set(found_checkpoints))
-        unique_checkpoints.sort(key=lambda x: x.stat().st_mtime, reverse=True)
         
-        logger.info(f"Found {len(unique_checkpoints)} potential checkpoint files")
-        for i, ckpt in enumerate(unique_checkpoints[:5]):  # Log top 5
+        # Enhanced sorting: prioritize by training progress (epoch + step)
+        sorted_checkpoints = self._sort_checkpoints_by_progress(unique_checkpoints)
+        
+        logger.info(f"Found {len(sorted_checkpoints)} potential checkpoint files")
+        for i, ckpt in enumerate(sorted_checkpoints[:5]):  # Log top 5
             mod_time = datetime.fromtimestamp(ckpt.stat().st_mtime)
-            logger.info(f"  {i+1}. {ckpt.name} (modified: {mod_time})")
+            epoch, step = self._extract_epoch_step_from_filename(ckpt)
+            progress_info = f"epoch {epoch}, step {step}" if epoch is not None else "unknown progress"
+            logger.info(f"  {i+1}. {ckpt.name} ({progress_info}, modified: {mod_time.strftime('%Y-%m-%d %H:%M:%S')})")
         
-        return unique_checkpoints
+        return sorted_checkpoints
+    
+    def _extract_epoch_step_from_filename(self, checkpoint_path: Path) -> Tuple[Optional[int], Optional[int]]:
+        """
+        Extract epoch and step information from checkpoint filename
+        
+        Args:
+            checkpoint_path: Path to checkpoint file
+            
+        Returns:
+            Tuple of (epoch, step) or (None, None) if not extractable
+        """
+        import re
+        
+        filename = checkpoint_path.name
+        
+        # Pattern for sub-epoch checkpoints: checkpoint_epoch_X_step_Y.pth
+        step_pattern = r'checkpoint_epoch_(\d+)_step_(\d+)\.pth'
+        step_match = re.search(step_pattern, filename)
+        if step_match:
+            epoch = int(step_match.group(1))
+            step = int(step_match.group(2))
+            return epoch, step
+        
+        # Pattern for epoch checkpoints: checkpoint_epoch_X.pth
+        epoch_pattern = r'checkpoint_epoch_(\d+)\.pth'
+        epoch_match = re.search(epoch_pattern, filename)
+        if epoch_match:
+            epoch = int(epoch_match.group(1))
+            return epoch, 0  # Start of epoch
+        
+        # Special checkpoints
+        if 'latest' in filename.lower():
+            return 999999, 999999  # High priority for latest
+        elif 'best' in filename.lower():
+            return 999998, 999999  # High priority for best
+        
+        return None, None
+    
+    def _sort_checkpoints_by_progress(self, checkpoints: List[Path]) -> List[Path]:
+        """
+        Sort checkpoints by training progress (epoch, then step)
+        
+        Args:
+            checkpoints: List of checkpoint paths
+            
+        Returns:
+            Sorted list with most advanced training first
+        """
+        def progress_key(checkpoint_path: Path) -> Tuple[int, int, float]:
+            epoch, step = self._extract_epoch_step_from_filename(checkpoint_path)
+            
+            # If we can't extract epoch/step, fall back to modification time
+            if epoch is None:
+                mod_time = checkpoint_path.stat().st_mtime
+                return (0, 0, mod_time)
+            
+            # Primary sort: epoch (descending), secondary: step (descending), tertiary: mod time (descending)
+            mod_time = checkpoint_path.stat().st_mtime
+            return (epoch, step or 0, mod_time)
+        
+        # Sort by progress (most advanced first)
+        sorted_checkpoints = sorted(checkpoints, key=progress_key, reverse=True)
+        
+        logger.debug(f"Checkpoint sorting order:")
+        for i, ckpt in enumerate(sorted_checkpoints[:10]):  # Log top 10
+            epoch, step = self._extract_epoch_step_from_filename(ckpt)
+            logger.debug(f"  {i+1}. {ckpt.name} (epoch: {epoch}, step: {step})")
+        
+        return sorted_checkpoints
     
     def auto_resume(self) -> ResumeResult:
         """
